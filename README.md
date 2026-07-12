@@ -1,109 +1,90 @@
-# 🧪 Lab 1 — Übung 1.1: Hello, alle Plattformen
+# 🧪 Lab 1 — Übung 1.2: Multiplatform Networking mit Ktor
 
-**Willkommen zum Kotlin-Multiplatform-Workshop!**
+**Dieser Branch enthält die Musterlösung von Übung 1.1** — vergleichen Sie gern mit Ihrer Lösung (`git diff main -- shared/`), bevor Sie hier weitermachen.
 
-Ausgangspunkt ist ein frisches KMP-Projekt mit fünf Targets: **Android, iOS, Desktop, Web (JS) und Web (Wasm)**. Es läuft — aber es weiß noch fast nichts über die Plattformen, auf denen es lebt. Das ändern wir jetzt: In dieser Übung lernen Sie das Projekt kennen und schreiben Ihren ersten eigenen `expect`/`actual`-Code, der auf **allen fünf Targets** funktioniert.
+Jetzt bekommt unsere Weather App echte Daten: Wir bauen die komplette Netzwerk-Schicht — **einmal, in `commonMain`** — und holen das aktuelle Wetter von der [Open-Meteo API](https://open-meteo.com) (kostenlos, ohne API-Key).
 
-> 📘 Die Theorie zu dieser Übung finden Sie im [HANDOUT.md](HANDOUT.md), **Modul 2** (Build-System & Source Sets) und **Modul 3** (`expect`/`actual`).
+> 📘 Die Theorie zu dieser Übung finden Sie im [HANDOUT.md](HANDOUT.md), **Modul 4** (Ktor & kotlinx.serialization). Die fertigen Dependency-Einträge stehen in **Anhang A, Schritt 1 + 2**.
 
 ---
 
 ## 🔍 Die Ausgangslage
 
-Werfen Sie einen Blick in `shared/src/commonMain/.../Platform.kt`:
+Die App kennt seit Übung 1.1 ihre Plattform und ihre Zeitzone — aber Wetterdaten hat sie noch keine. Der Request, den wir bauen (probieren Sie ihn im Browser aus!):
 
-```kotlin
-interface Platform {
-    val name: String
-}
-
-expect fun getPlatform(): Platform
+```
+https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m,weather_code,wind_speed_10m&timezone=Europe/Berlin
 ```
 
-Ein Interface, eine `expect`-Funktion — und in `androidMain`, `iosMain`, `jvmMain`, `jsMain` und `wasmJsMain` jeweils ein `actual`, das den Plattform-Namen liefert. Die `App()`-Composable in `commonMain` zeigt ihn nach einem Button-Klick an.
+```json
+{
+  "latitude": 52.52, "longitude": 13.41,
+  "current": {
+    "time": "2026-07-13T10:15",
+    "temperature_2m": 21.4,
+    "weather_code": 3,
+    "wind_speed_10m": 12.7
+  }
+}
+```
 
-Unsere Weather App wird später die **Zeitzone des Geräts** brauchen (die Open-Meteo API liefert Zeitstempel pro Zeitzone). Eine Zeitzone auslesen kann jede Plattform — aber jede anders: `java.util.TimeZone` auf JVM/Android, `NSTimeZone` auf iOS, `Intl` im Browser. Ein Fall wie aus dem Lehrbuch für `expect`/`actual`.
+Retrofit und Gson helfen uns hier nicht — beide sind JVM-only (Handout, Modul 4.1). Unsere Werkzeuge: **Ktor** und **kotlinx.serialization**.
 
 ## 🎯 Das Ziel
 
-* Sie haben die App auf **Desktop (mit Hot Reload!), Android und im Web** gestartet.
-* Das `Platform`-Interface hat eine neue Property `timeZoneId` — und **alle fünf Targets** liefern sie über ihre native API.
-* Die UI zeigt Plattform-Name **und** Zeitzone an.
+* Eine `WeatherApi` in `commonMain`, die das aktuelle Wetter als **typsicheres Domain-Modell** liefert.
+* Pro Target die **richtige Engine**: OkHttp (Android, Desktop), Darwin (iOS), Js (Web).
+* Die App zeigt auf Desktop, Android und im Web die aktuelle Temperatur in Berlin.
 
 ## 🛠 Die Aufgaben im Detail
 
-### Schritt 1: Projekt-Tour
+### Schritt 1: Dependencies einbinden
 
-Beantworten Sie für sich (Handout, Modul 2 hilft):
+Ergänzen Sie `gradle/libs.versions.toml` und `shared/build.gradle.kts` um das **Serialization-Plugin**, **Ktor** (Core, ContentNegotiation, kotlinx-json, Logging) und die **Engines pro Source Set** — die fertigen Einträge stehen im [HANDOUT.md, Anhang A](HANDOUT.md#anhang-a-setup--dependencies-für-die-übungen). Danach: Sync!
 
-1. In welcher Datei werden die fünf **Targets** deklariert — und welches Artefakt erzeugt jedes davon?
-2. Warum liegt `App.kt` in `commonMain`, `MainViewController.kt` aber in `iosMain`?
-3. Welche Source Sets **sehen** den Code aus `commonMain` — und warum gilt das umgekehrt nicht?
+### Schritt 2: Die DTOs
 
-### Schritt 2: Die App starten
+Legen Sie in `commonMain` das Package `weather` an und modellieren Sie die JSON-Antwort als `@Serializable` data classes (`ForecastDto`, `CurrentDto`). Die Snake-Case-Felder (`temperature_2m`, …) bekommen per `@SerialName` idiomatische Kotlin-Namen.
 
-```bash
-# Desktop — unser Standard-Workflow: Hot Reload, Änderungen erscheinen live
-./gradlew :desktopApp:hotRun --auto
+### Schritt 3: Das Domain-Modell
 
-# Web (Wasm) — öffnet einen Dev-Server im Browser
-./gradlew :webApp:wasmJsBrowserDevelopmentRun
+DTOs bleiben in der Datenschicht! Erstellen Sie ein Domain-Modell `CurrentWeather` (Temperatur, Wind, WMO-Weather-Code, Zeitstempel) und eine Mapping-Extension `fun ForecastDto.toDomain(): CurrentWeather`.
 
-# Android — wie gewohnt über die IDE (Run-Konfiguration "androidApp")
-```
+### Schritt 4: Die WeatherApi
 
-Lassen Sie den Desktop-Prozess für den Rest der Übung laufen — jede Änderung im Shared Code erscheint sofort.
-
-### Schritt 3: Das Interface erweitern
-
-Ergänzen Sie in `commonMain` das `Platform`-Interface:
+Bauen Sie eine Klasse `WeatherApi` mit einem konfigurierten `HttpClient` (ContentNegotiation mit `ignoreUnknownKeys = true`, Logging) und:
 
 ```kotlin
-interface Platform {
-    val name: String
-    val timeZoneId: String
-}
+suspend fun currentWeather(latitude: Double, longitude: Double): CurrentWeather
 ```
 
-Beobachten Sie, was passiert: **Der Compiler zwingt Sie nun in jedes einzelne Target.** Genau so fühlt sich der `expect`/`actual`-Kontrakt im Alltag an — vergessene Plattformen sind ein Compile-Fehler, kein Laufzeit-Crash.
+**Der Clou:** Übergeben Sie als `timezone`-Parameter die `timeZoneId` aus Übung 1.1 — Ihr `expect`/`actual`-Code zahlt sich schon aus.
 
-### Schritt 4: Fünf actuals, fünf native APIs
+### Schritt 5: Anzeigen!
 
-Implementieren Sie `timeZoneId` in allen Plattform-Klassen:
+Ersetzen Sie in `App.kt` den Greeting-Block: Beim Aufklappen lädt ein `LaunchedEffect` das Wetter und zeigt die Temperatur an. Ein `try`/`catch` mit Fehlertext genügt fürs Erste — sauberes State-Management (`Loading`/`Success`/`Error`) bauen wir in Übung 2.1.
 
-| Source Set | Native API (Startpunkt) |
-| --- | --- |
-| `androidMain` | `java.util.TimeZone.getDefault()` |
-| `jvmMain` | `java.util.TimeZone.getDefault()` |
-| `iosMain` | `platform.Foundation.NSTimeZone` → `localTimeZone` |
-| `jsMain` | `js("Intl.DateTimeFormat().resolvedOptions().timeZone")` |
-| `wasmJsMain` | wie `jsMain` — aber: `js(...)` muss hier der **einzige Ausdruck** einer Funktion sein |
+**Android-Falle:** Ohne `<uses-permission android:name="android.permission.INTERNET" />` im `AndroidManifest.xml` sieht Android keinen Netzwerk-Request — der Wizard legt die Permission nicht an.
 
-### Schritt 5: Sichtbar machen
+### Schritt 6: Der Mapping-Test
 
-Erweitern Sie `App.kt` in `commonMain`, sodass unter dem Greeting auch die Zeitzone erscheint — z.B. `Text("Zeitzone: ${getPlatform().timeZoneId}")`. Speichern — der Desktop aktualisiert sich von selbst. 🎉
-
-### Schritt 6: Der Kompilier-Beweis
-
-```bash
-./gradlew :shared:compileKotlinJvm :shared:compileKotlinJs :shared:compileKotlinWasmJs :androidApp:assembleDebug
-```
+Schreiben Sie in `commonTest` einen Test, der ein Beispiel-JSON mit `Json.decodeFromString` parst und das Mapping nach `CurrentWeather` prüft. Er läuft mit `./gradlew :shared:jvmTest` — und würde auf **jedem** Target dasselbe prüfen.
 
 ## ✅ Definition of Done
 
-- [ ] Die drei Fragen der Projekt-Tour können Sie beantworten (Stichprobe im Plenum!).
-- [ ] `Platform.timeZoneId` existiert in `commonMain` — und alle **fünf** `actual`-Implementierungen nutzen die jeweilige native API.
-- [ ] Desktop, Android und Web zeigen Name **und** Zeitzone der Plattform an.
-- [ ] Der Kompilier-Beweis aus Schritt 6 läuft ohne Fehler durch.
-- [ ] Das iOS-`actual` ist geschrieben (Code-Review im Plenum — kompiliert wird es nur von Teilnehmenden mit Mac).
+- [ ] `WeatherApi`, DTOs und Domain-Modell liegen in `commonMain` — kein plattformspezifischer Netzwerk-Code.
+- [ ] Jedes Target hat genau eine Engine-Dependency (Anhang A) — und `commonMain` kennt keine davon.
+- [ ] Desktop, Android und Web zeigen die aktuelle Temperatur in Berlin.
+- [ ] Der `timezone`-Parameter kommt aus `Platform.timeZoneId` (Übung 1.1).
+- [ ] Der Mapping-Test ist grün: `./gradlew :shared:jvmTest`.
 
 ## 💡 Tipps
 
-* In `iosMain` tippen Sie einfach `NSTimeZone.` und lassen die Autocomplete die Foundation-API zeigen — die kompletten Apple-SDKs sind als Kotlin-Deklarationen da (Handout, Modul 3.3).
-* Auf dem JS-Target liefert `js(...)` ein `dynamic` — deklarieren Sie den Rückgabetyp der Funktion explizit als `String`.
-* Wenn der Web-Build meckert, aber der Desktop läuft: Sie haben vermutlich ein `actual` vergessen — die Fehlermeldung nennt Target und erwartete Signatur.
-* Linux/Windows überspringen die iOS-Targets automatisch (Warnung im Log ist okay) — das ist das erwartete Verhalten aus Handout, Modul 2.3.
+* Startet der Client nicht ("Failed to find HTTP client engine"), fehlt die Engine im **jeweiligen** Source Set — prüfen Sie `shared/build.gradle.kts` gegen Anhang A.
+* `ignoreUnknownKeys = true` nicht vergessen — Open-Meteo liefert mehr Felder, als unsere DTOs kennen (`current_units` etc.).
+* Das Logging-Plugin zeigt Request und Response in der Konsole — auf dem Desktop das schnellste Debugging.
+* Im Web gilt CORS: Open-Meteo erlaubt Browser-Requests explizit — bei eigenen APIs wäre das Ihre erste Fehlerquelle.
 
 ---
 
-**Fertig?** Die Musterlösung — und damit die Aufgabenstellung für **Übung 1.2 (Multiplatform Networking mit Ktor)** — finden Sie im Branch `lab-1-uebung-1.2`.
+**Fertig?** Die Musterlösung finden Sie im Branch `lab-1-final` — damit ist Tag 1 geschafft. 🎉 Tag 2 startet im Branch `lab-2-uebung-2.1`.
