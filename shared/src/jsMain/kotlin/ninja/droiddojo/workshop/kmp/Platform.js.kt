@@ -9,6 +9,11 @@ class JsPlatform: Platform {
     override val name: String = userAgent.findAnyOf(browserList, ignoreCase = true)
             ?.let { (startIndex) -> userAgent.substring(startIndex).substringBefore(" ") }
             ?: "Unknown"
+
+    override val timeZoneId: String = intlTimeZone()
 }
+
+private fun intlTimeZone(): String =
+    js("Intl.DateTimeFormat().resolvedOptions().timeZone").unsafeCast<String>()
 
 actual fun getPlatform(): Platform = JsPlatform()
