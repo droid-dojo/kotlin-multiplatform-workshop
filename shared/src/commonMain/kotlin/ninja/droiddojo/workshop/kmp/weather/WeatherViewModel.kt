@@ -15,16 +15,30 @@ class WeatherViewModel(
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
 
     init {
+        // Cached data wins: as soon as the database emits, we show it
+        viewModelScope.launch {
+            repository.observeWeather().collect { cached ->
+                if (cached != null) {
+                    _uiState.value = WeatherUiState.Success(cached)
+                }
+            }
+        }
         refresh()
     }
 
     fun refresh() {
         viewModelScope.launch {
-            _uiState.value = WeatherUiState.Loading
-            _uiState.value = try {
-                WeatherUiState.Success(repository.currentWeather())
+            if (_uiState.value !is WeatherUiState.Success) {
+                _uiState.value = WeatherUiState.Loading
+            }
+            try {
+                repository.refresh()
+                // no manual state update: the upsert re-emits through observeWeather()
             } catch (e: Exception) {
-                WeatherUiState.Error(e.message ?: "Unbekannter Fehler")
+                // keep stale data on screen; the error state is for cold starts only
+                if (_uiState.value !is WeatherUiState.Success) {
+                    _uiState.value = WeatherUiState.Error(e.message ?: "Unbekannter Fehler")
+                }
             }
         }
     }
