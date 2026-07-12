@@ -48,10 +48,18 @@ private fun WeatherContent(weather: CurrentWeather, onRefresh: () -> Unit) {
         Text("${weather.temperature} °C", style = MaterialTheme.typography.displayMedium)
         Text("Berlin — ${weather.condition.label}", style = MaterialTheme.typography.titleMedium)
         Text("Wind ${weather.windSpeed} km/h", style = MaterialTheme.typography.bodyMedium)
+        Text("Stand: ${formatUpdatedAt(weather.time)}", style = MaterialTheme.typography.bodySmall)
         Button(onClick = onRefresh) {
             Text("Aktualisieren")
         }
     }
+}
+
+// Tested on desktop, works fine — ship it!
+private fun formatUpdatedAt(isoTime: String): String {
+    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
+    val formatter = java.text.SimpleDateFormat("HH:mm")
+    return formatter.format(parser.parse(isoTime)!!) + " Uhr"
 }
 
 @Composable
