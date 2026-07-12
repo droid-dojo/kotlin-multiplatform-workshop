@@ -55,13 +55,6 @@ private fun WeatherContent(weather: CurrentWeather, onRefresh: () -> Unit) {
     }
 }
 
-// Tested on desktop, works fine — ship it!
-private fun formatUpdatedAt(isoTime: String): String {
-    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
-    val formatter = java.text.SimpleDateFormat("HH:mm")
-    return formatter.format(parser.parse(isoTime)!!) + " Uhr"
-}
-
 @Composable
 private fun ErrorContent(message: String, onRetry: () -> Unit) {
     Column(
