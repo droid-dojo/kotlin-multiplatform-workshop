@@ -387,3 +387,558 @@ https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=te
 ```
 
 ---
+
+# Tag 2: Shared State, UI-Integration, Datenhaltung & Web
+
+## Modul 5: Shared Logic in der Praxis — Coroutines, Flow & ViewModels
+
+### 5.1 Coroutines im Common Code: Was ist überall gleich — und was nicht?
+
+`suspend`, Structured Concurrency, `Flow` — die komplette Coroutine-Maschinerie ist Multiplatform. Unterschiede gibt es nur bei den **Dispatchern**, denn die müssen auf echte Plattform-Threads abgebildet werden:
+
+| Dispatcher | Android | iOS | Desktop/JVM | JS / Wasm |
+| --- | --- | --- | --- | --- |
+| `Main` | Main Thread | Main Queue | AWT/Swing EDT¹ | Event Loop |
+| `Default` | Thread-Pool | Thread-Pool | Thread-Pool | = `Main`² |
+| `IO` | Thread-Pool | Thread-Pool | Thread-Pool | **existiert nicht** |
+
+¹ via `kotlinx-coroutines-swing` — steckt bereits in unserem `desktopApp`.
+² Der Browser ist single-threaded — "Nebenläufigkeit" heißt dort Kooperation auf dem Event Loop.
+
+> **Faustregel:**
+> `Dispatchers.IO` hat im Common Code nichts verloren — es existiert auf JS/Wasm nicht. Die gute Nachricht: Sie brauchen es fast nie. **Ktor und Room sind bereits main-safe** (suspend-APIs verwalten ihre Threads selbst). Für eigene CPU-Arbeit: `withContext(Dispatchers.Default)`.
+
+### 5.2 Kotlin/Native Concurrency: Entwarnung
+
+Wer vor 2022 mit KMP experimentiert hat, erinnert sich an `freeze()`, `InvalidMutabilityException` und die Regel "Objekte gehören einem Thread". **Dieses Memory-Model ist Geschichte.** Seit Kotlin 1.7.20 gilt auf Kotlin/Native das gleiche Modell wie auf der JVM: Objekte dürfen zwischen Threads geteilt werden, `StateFlow` & Co. funktionieren ohne Sonderregeln.
+
+Was bleibt (und auf jeder Plattform gilt): **UI-Zustand wird am Main-Thread konsumiert.** Genau das erledigt `viewModelScope` für uns.
+
+### 5.3 Flow & StateFlow: Der Zustands-Strom im Shared Module
+
+Das aus Android bekannte UDF-Muster (Unidirectional Data Flow) wandert unverändert ins Shared Module:
+
+```kotlin
+// commonMain — models every state the UI can be in
+sealed interface WeatherUiState {
+    data object Loading : WeatherUiState
+    data class Success(val weather: CurrentWeather) : WeatherUiState
+    data class Error(val message: String) : WeatherUiState
+}
+```
+
+Kalte Flows aus der Datenschicht werden per `stateIn` zu heißem, teilbarem UI-State — inklusive `WhileSubscribed(5_000)` als Lifecycle-Schutz. Alles davon ist `commonMain`-Code.
+
+### 5.4 Gemeinsame ViewModels: Jetpack ViewModel — überall
+
+Die KMP-Variante von `androidx.lifecycle` (steckt schon in unserem Projekt!) bringt das echte Jetpack-`ViewModel` auf alle Targets:
+
+```kotlin
+// commonMain — a real Jetpack ViewModel, shared across all platforms
+class WeatherViewModel(
+    private val repository: WeatherRepository,
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
+    val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.value = WeatherUiState.Loading
+            _uiState.value = try {
+                WeatherUiState.Success(repository.currentWeather())
+            } catch (e: Exception) {
+                WeatherUiState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+}
+```
+
+* `viewModelScope` wird pro Plattform korrekt an den Main-Dispatcher gebunden und beim Wegwerfen des ViewModels gecancelt.
+* In Compose (egal ob Android, Desktop, Web oder iOS) kommt das ViewModel per `viewModel { ... }` in die Composition — **eine State-Verwaltung für alle Plattformen**.
+* Konsumiert **SwiftUI** das ViewModel direkt, gilt die Interop-Einschränkung aus Modul 3 (typgelöschte Flows) — wie man damit umgeht, zeigt der Showcase in 6.3.
+
+---
+
+## Modul 6: UI-Integration — Compose Multiplatform & SwiftUI
+
+### 6.1 Compose Multiplatform: Eine UI, vier Einstiegspunkte
+
+Unsere `App()`-Composable lebt in `commonMain` — jede Plattform braucht nur noch einen Adapter an ihr Fenstersystem:
+
+```kotlin
+// androidApp — MainActivity.kt
+setContent { App() }
+
+// shared/iosMain — MainViewController.kt (consumed by SwiftUI, see 6.3)
+fun MainViewController() = ComposeUIViewController { App() }
+
+// desktopApp — main.kt
+fun main() = application {
+    Window(onCloseRequest = ::exitApplication, title = "KMPWorkshop") { App() }
+}
+
+// webApp — main.kt
+ComposeViewport { App() }
+```
+
+Das ist die gesamte plattformspezifische UI-Arbeit. Material 3, `remember`, `LaunchedEffect`, `collectAsStateWithLifecycle` — alles läuft identisch auf allen Targets. Auf dem Desktop kommt mit **Compose Hot Reload** die schnellste Iterationsschleife dazu: UI-Änderung speichern, App aktualisiert sich live — unser Standard-Workflow in den Übungen.
+
+### 6.2 State bis in die UI: Das Gesamtbild
+
+```
+   Ktor ──▶ Repository ──▶ WeatherViewModel ──▶ StateFlow<WeatherUiState>
+  (commonMain)  (commonMain)   (commonMain)              │
+                                                         ▼
+                              ┌──────────────────────────────────┐
+                              │  Compose (common):               │
+                              │  val state by                    │
+                              │    vm.uiState.collectAsState...()│
+                              │  when (state) { ... }            │
+                              └──────────────────────────────────┘
+```
+
+Der `when`-Block über dem `sealed interface` ist dabei mehr als Syntax: Der Compiler **erzwingt**, dass die UI jeden Zustand behandelt — Loading-Spinner und Error-Screen können nicht mehr "vergessen" werden.
+
+### 6.3 SwiftUI-Showcase: Kotlin-State in Swift konsumieren
+
+> **Hinweis:** Diesen Teil behandeln wir als **Code-Showcase** — wir lesen und diskutieren den Code gemeinsam, bauen ihn aber nicht live (kein Mac im Kursraum). Der Code liegt vollständig im Repository unter `iosApp/`.
+
+**Variante A — Compose-UI in SwiftUI hosten** (so ist unser Projekt verdrahtet): Die geteilte Compose-UI wird als `UIViewController` verpackt; SwiftUI ist nur noch die äußerste Schale:
+
+```swift
+// iosApp — ContentView.swift
+struct ComposeView: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIViewController {
+        MainViewControllerKt.MainViewController()   // Kotlin function!
+    }
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+}
+```
+
+**Variante B — native SwiftUI über dem Shared ViewModel** (der klassische "Share logic, not UI"-Schnitt): Ein `ObservableObject` sammelt den `StateFlow` ein und übersetzt ihn in `@Published`-Properties:
+
+```swift
+// iosApp — plain SwiftUI consuming the shared StateFlow
+@MainActor
+final class WeatherObservable: ObservableObject {
+    @Published var state: WeatherUiState = WeatherUiStateLoading()
+    private let viewModel = WeatherViewModel(repository: WeatherRepository())
+
+    func activate() async {
+        // With SKIE, the StateFlow becomes a native AsyncSequence:
+        for await state in viewModel.uiState {
+            self.state = state
+        }
+    }
+}
+
+struct WeatherView: View {
+    @StateObject var observable = WeatherObservable()
+
+    var body: some View {
+        Group {
+            switch observable.state {
+            case is WeatherUiStateLoading: ProgressView()
+            case let success as WeatherUiStateSuccess: Text("\(success.weather.temperature) °C")
+            case let error as WeatherUiStateError: Text(error.message)
+            default: EmptyView()   // Swift can't prove exhaustiveness (module 3!)
+            }
+        }
+        .task { await observable.activate() }
+    }
+}
+```
+
+Genau hier zahlt sich die Theorie aus Modul 3 aus: Das `default:` ist kein Stilfehler, sondern die typgelöschte ObjC-Interop — und die `for await`-Zeile funktioniert so elegant nur mit **SKIE** (ohne: Callback-basierte `watch`-Wrapper von Hand).
+
+### 6.4 Mix & Match und Ausblick
+
+* **Native Views in Compose:** `UIKitView` (iOS) bzw. `HtmlElementView` (Web) betten native Komponenten — Karten, Video, WebViews — in die gemeinsame UI ein.
+* **Schrittweise Migration** ist damit in beide Richtungen möglich: erst ein Screen in Compose, der Rest nativ — oder umgekehrt.
+* **Compose Multiplatform heute:** Android & Desktop stabil, iOS stabil, Web Beta. Ein Team, das Jetpack Compose kann, kann Compose Multiplatform — die Lernkurve ist im Wesentlichen null.
+
+---
+
+## Modul 7: Datenhaltung mit Room
+
+### 7.1 Warum Room? (Eine Anpassung der Agenda)
+
+In der ursprünglichen Agenda stand an dieser Stelle SQLDelight — wir arbeiten stattdessen mit **Room 3.0**, und das aus drei Gründen:
+
+1. **Ihr Android-Wissen zählt doppelt:** Room ist der Jetpack-Standard, den Android-Teams ohnehin kennen — `@Entity`, `@Dao`, `@Query` funktionieren in KMP exakt wie gewohnt.
+2. **First-Party-Support:** Room ist seit 2.7 offiziell multiplattform und Teil von Googles KMP-Strategie (Modul 1.4).
+3. **Room 3.0 ist das KMP-Release** (stabil seit Juli 2026, neues Package `androidx.room3`): Kotlin-only Codegen, **Coroutines-first** (blockierende DAO-Funktionen sind abgeschafft — `suspend` oder `Flow`, sonst Compile-Fehler) und erstmals **Web-Support (JS/Wasm)**. Damit deckt *eine* Datenbank-Library alle fünf Targets unseres Projekts ab.
+
+| | Room 3 | SQLDelight |
+| --- | --- | --- |
+| Ansatz | **Entity-first** (Annotations → SQL) | **SQL-first** (`.sq`-Dateien → Kotlin) |
+| Herausgeber | Google (Jetpack) | CashApp (Square) |
+| Web-Support | ja (Web Worker + OPFS) | ja (Web Worker Driver) |
+| Für Android-Teams | kein Umlernen | neues Toolset |
+
+SQLDelight bleibt eine ausgezeichnete Library — wer echtes SQL bevorzugt oder exotischere Targets braucht, greift dort zu. Die Architektur-Muster dieses Moduls (SSOT, Flow aus der DB) sind identisch.
+
+### 7.2 Setup: KSP, Plugin, Treiber
+
+Room braucht drei Zutaten (vollständige Einträge in **Anhang A**):
+
+1. **KSP** — der Annotation-Prozessor, konfiguriert **pro Target** (`kspAndroid`, `kspIosArm64`, `kspJs`, …).
+2. Das **Room-Gradle-Plugin** (`androidx.room3`) mit `schemaDirectory` für Migrations-Schemata.
+3. Einen **SQLite-Treiber** — und der ist Plattform-Sache:
+   * Android, iOS, Desktop: `BundledSQLiteDriver` (`androidx.sqlite:sqlite-bundled`) — kompiliert SQLite direkt mit ein. Damit läuft überall dieselbe SQLite-Version statt "was auch immer das OS mitbringt" (Android 7 liefert SQLite 3.9 von 2015!).
+   * Browser: `WebWorkerSQLiteDriver` (`androidx.sqlite:sqlite-web`) — SQLite läuft in einem **Web Worker** und persistiert ins **Origin Private File System (OPFS)**, den Browser-Speicher für genau solche Fälle.
+
+### 7.3 Entity, DAO, Database: Fast wie zu Hause
+
+```kotlin
+// commonMain — identical to Android Room, plus Flow support
+@Entity
+data class WeatherEntity(
+    @PrimaryKey val locationKey: String,
+    val temperature: Double,
+    val weatherCode: Int,
+    val windSpeed: Double,
+    val updatedAt: String,
+)
+
+@Dao
+interface WeatherDao {
+    @Upsert
+    suspend fun upsert(weather: WeatherEntity)
+
+    @Query("SELECT * FROM WeatherEntity WHERE locationKey = :key")
+    fun observe(key: String): Flow<WeatherEntity?>
+}
+```
+
+Der einzige sichtbare Unterschied zu Android-Room 2.x: Alle Imports kommen aus **`androidx.room3.*`** — und der `@Dao` darf **keine blockierenden Funktionen** mehr enthalten (`suspend` oder `Flow`, sonst Compile-Fehler). Unser Code oben erfüllt das bereits — wer nach Modul 5 gearbeitet hat, schreibt automatisch Room-3-konform.
+
+Zwei KMP-Besonderheiten bei der Database-Klasse:
+
+```kotlin
+// commonMain
+@Database(entities = [WeatherEntity::class], version = 1)
+@ConstructedBy(WeatherDatabaseConstructor::class)          // KMP-specific!
+abstract class WeatherDatabase : RoomDatabase() {
+    abstract fun weatherDao(): WeatherDao
+}
+
+// The Room compiler generates the actuals — one per target.
+@Suppress("KotlinNoActualForExpect")
+expect object WeatherDatabaseConstructor : RoomDatabaseConstructor<WeatherDatabase> {
+    override fun initialize(): WeatherDatabase
+}
+```
+
+`@ConstructedBy` ersetzt die Reflection, mit der Room auf Android die generierte Implementierung findet — auf Kotlin/Native gibt es keine Reflection (Modul 1.2!), also übernimmt der Compiler via `expect object`.
+
+**Datenbank-Pfad und Treiber sind Plattform-Sache** — ein Paradebeispiel für die Faustregel aus Modul 3.2 (kleine, zustandslose Zugriffe → `expect`/`actual`):
+
+```kotlin
+// commonMain
+expect fun databaseBuilder(): RoomDatabase.Builder<WeatherDatabase>
+
+// androidMain — needs the Context (injected, see exercise 2.2)
+actual fun databaseBuilder(): RoomDatabase.Builder<WeatherDatabase> =
+    Room.databaseBuilder<WeatherDatabase>(
+        context = appContext,
+        name = appContext.getDatabasePath("weather.db").absolutePath,
+    ).setDriver(BundledSQLiteDriver())
+
+// iosMain — Documents directory via NSFileManager (module 3.3!)
+actual fun databaseBuilder(): RoomDatabase.Builder<WeatherDatabase> =
+    Room.databaseBuilder<WeatherDatabase>(
+        name = documentsPath() + "/weather.db",
+    ).setDriver(BundledSQLiteDriver())
+
+// jsMain / wasmJsMain — SQLite in a Web Worker, persisted to OPFS
+actual fun databaseBuilder(): RoomDatabase.Builder<WeatherDatabase> =
+    Room.databaseBuilder<WeatherDatabase>(name = "weather.db")
+        .setDriver(WebWorkerSQLiteDriver(worker))
+
+// Shared assembly, common again:
+fun createDatabase(): WeatherDatabase =
+    databaseBuilder()
+        .setQueryCoroutineContext(Dispatchers.Default)
+        .build()
+```
+
+> **Faustregel:**
+> Room 3.0 ist zum Workshop-Zeitpunkt wenige Wochen alt. Android, iOS und Desktop sind der seit Room 2.7 erprobte Pfad — das Web-Target ist Neuland (Worker-Setup, asynchrone Treiber-APIs) und in der Übung bewusst als **Bonus** markiert. Genau so würde man es auch im Projekt einführen: erprobte Targets zuerst, das neueste Target hinter einem Feature-Branch.
+
+### 7.4 Offline-First: Die Datenbank als Single Source of Truth
+
+Mit DB und API entsteht das SSOT-Muster — die UI liest **ausschließlich** aus der Datenbank, das Netzwerk *aktualisiert* nur:
+
+```kotlin
+// commonMain
+class WeatherRepository(
+    private val api: WeatherApi,
+    private val dao: WeatherDao,
+) {
+    // UI observes the database — works offline by definition
+    fun observeWeather(key: String): Flow<CurrentWeather?> =
+        dao.observe(key).map { it?.toDomain() }
+
+    // Network only refreshes the SSOT
+    suspend fun refresh(key: String, lat: Double, lon: Double) {
+        val dto = api.fetchForecast(lat, lon)
+        dao.upsert(dto.toEntity(key))
+    }
+}
+```
+
+Flugzeugmodus? Die App zeigt den letzten Stand statt eines Fehler-Screens — auf **jeder** Plattform, denn das Muster lebt komplett in `commonMain`.
+
+### 7.5 Migrationen: Einmal definiert, überall versioniert
+
+Auch das Schema-Management ist geteilt — die Datenbank-Version ist auf allen Plattformen dieselbe:
+
+* Das Gradle-Plugin exportiert das Schema als JSON nach `schemas/` (→ gehört ins Git! Es ist die Historie, gegen die migriert wird).
+* **Auto-Migrations** (`@Database(autoMigrations = [AutoMigration(1, 2)])`) decken einfache Fälle (Spalte hinzufügen) ab.
+* Für alles andere: klassische `Migration`-Objekte mit SQL — einmal geschrieben, auf jedem Target ausgeführt.
+
+> **Faustregel:**
+> Ohne registrierte Migration wirft Room beim Schema-Sprung — auf dem iPhone genauso wie auf Android. Der Multiplatform-Bonus: Sie schreiben und testen die Migration **einmal** (JVM-Test!), statt sie in zwei Codebasen synchron halten zu müssen.
+
+---
+
+## Modul 8: Web-Targets — Kotlin/JS und Kotlin/Wasm
+
+### 8.1 Zwei Wege in den Browser
+
+Unser Projekt kompiliert das Web-Target doppelt — und genau so ist es gedacht:
+
+| | Kotlin/**JS** | Kotlin/**Wasm** |
+| --- | --- | --- |
+| Output | JavaScript | WebAssembly (mit GC) |
+| Performance | gut | nahe JVM — oft ~2× schneller als JS |
+| Browser-Support | universell | moderne Browser (WasmGC) |
+| Status | stabil | Beta, Standard-Empfehlung für Neues |
+
+**WebAssembly-Hintergrund:** Kotlin/Wasm setzt auf **WasmGC** — WebAssembly mit eingebautem Garbage Collector, sodass Kotlin keinen eigenen GC mitliefern muss. Seit Ende 2024 unterstützen **alle großen Browser** WasmGC (Chrome/Edge, Firefox, Safari ab 18.2). Für die Restmenge alter Browser bleibt das JS-Target als Fallback — deshalb die Doppelstrategie.
+
+### 8.2 Der webMain-Trick in unserem Projekt
+
+JS und Wasm teilen sich fast allen Code — unser `webApp` nutzt dafür einen gemeinsamen `webMain`-Source-Set (eine *custom* Zwischenebene, Modul 2.2 in Aktion):
+
+```
+        commonMain
+            │
+         webMain      ← webApp code lives here once
+        ┌───┴────┐
+     jsMain   wasmJsMain
+```
+
+Die Compose-UI landet per `ComposeViewport { App() }` auf einem Canvas — gerendert von Skia (via Wasm), nicht als DOM-Bäume. Konsequenz: pixelidentisches Rendering zur Desktop-/Mobile-App, aber die Seite verhält sich wie eine App, nicht wie ein Dokument (SEO, Textselektion!). Compose Web ist für **App-artige** Anwendungen gedacht, nicht für Content-Seiten.
+
+### 8.3 DOM-Interaktion: Web-APIs direkt aus Kotlin
+
+Auch ohne Compose sind sämtliche Browser-APIs aus Kotlin erreichbar — typsicher über die offiziellen **kotlin-wrappers** (`kotlin-browser`, bereits im Projekt):
+
+```kotlin
+// jsMain / wasmJsMain — the browser API, typed
+import web.dom.document
+
+fun updateTitle(city: String) {
+    document.title = "Weather — $city"
+}
+```
+
+Für alles jenseits der Wrapper: `external`-Deklarationen typisieren beliebige JS-APIs, `@JsExport` macht umgekehrt Kotlin-Funktionen für bestehendes JavaScript aufrufbar — der Migrationsweg, um KMP-Logik in eine existierende Web-App zu heben (Modul 9).
+
+> **Faustregel:**
+> Interop-Grenze im Blick behalten: Auf Wasm sind JS-Aufrufe teurer als auf dem JS-Target (Boundary-Crossing). Viele kleine DOM-Zugriffe in heißen Schleifen → JS-Target oder API-Design überdenken. Rechenlastige Shared Logic → genau dafür ist Wasm da.
+
+---
+
+## Modul 9: Final Roadmap — Der Migrationspfad zu KMP
+
+Zum Abschluss die Frage, die Sie in Ihre Projekte mitnehmen: **Wie kommt eine bestehende Single-Platform-App zu KMP?** Die Antwort ist nie "Rewrite", sondern immer inkrementell — das Spektrum aus Modul 1.1 wird zur Roadmap:
+
+### 9.1 Die vier Etappen
+
+1. **Ein Modul, ein Feature (Pilot):** Ein abgegrenztes Stück Logik — ein Validierungs-Modul, ein API-Client — wird als Shared Module extrahiert. Die bestehende App konsumiert es als ganz normales Artefakt: **AAR** für Android, **XCFramework** via SPM für iOS, **npm-Package** fürs Web. Die iOS-Kollegen merken idealerweise nur: eine neue Dependency.
+2. **Die Datenschicht:** Models → Networking (Retrofit ⇒ Ktor, Gson ⇒ kotlinx.serialization) → Persistenz (Room ist es oft schon!). Nach dieser Etappe ist der teuerste Code geteilt.
+3. **State & ViewModels:** Mit den KMP-Jetpack-Libraries wandern ViewModels und UDF-State ins Shared Module. Ab hier sind die nativen Apps nur noch UI.
+4. **UI (optional):** Compose Multiplatform — Screen für Screen, beginnend mit den am wenigsten plattform-idiomatischen (Settings, Formulare, interne Tools).
+
+### 9.2 Die ehrlichen Erfolgsfaktoren
+
+* **Das iOS-Team gehört ins Boot — ab Etappe 1.** KMP scheitert selten an der Technik, öfter daran, dass es sich für iOS-Entwickler wie eine feindliche Übernahme anfühlt. Gegenmittel: saubere API-Grenzen (SKIE!), gemeinsame Code-Ownership, und Swift-Kenntnisse im Kotlin-Team ernst nehmen.
+* **Build-Infrastruktur zuerst:** macOS-CI-Runner, Artefakt-Publishing und Versionierung des Shared Modules müssen stehen, *bevor* das zweite Feature geteilt wird.
+* **Exit-Strategie behalten:** Solange nur Logik geteilt wird, ist das Shared Module ersetzbar (Modul 1.1) — dieses Argument überzeugt auch skeptische Architektur-Boards.
+
+### 9.3 Checkliste für Ihr Projekt
+
+- [ ] Kandidaten identifiziert? (Viel Logik, wenig UI, auf beiden Plattformen doppelt gepflegt)
+- [ ] Libraries KMP-fähig? ([klibs.io](https://klibs.io) — Retrofit/Gson/RxJava haben direkte KMP-Pendants)
+- [ ] CI kann macOS-Builds? (ARM64-Runner, `konan`-Caching)
+- [ ] Team-Setup geklärt? (Wer reviewt `iosMain`-Code?)
+- [ ] Pilot klein genug, um in einem Sprint zu scheitern — und klein genug, um in einem Sprint zu überzeugen?
+
+---
+
+## Anhang A: Setup & Dependencies für die Übungen
+
+### Schritt 1: `gradle/libs.versions.toml` erweitern
+
+```toml
+[versions]
+# ... existing versions ...
+
+# Übung 1.2: Networking
+ktor = "3.5.0"
+kotlinx-serialization = "1.11.0"
+
+# Übung 2.2: Room
+ksp = "2.3.9"
+room = "3.0.0"
+sqlite = "2.7.0"
+
+[libraries]
+# ... existing libraries ...
+
+# Übung 1.2: Ktor + kotlinx.serialization
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-contentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }     # Android + Desktop
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }     # iOS
+ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }             # JS + Wasm
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+
+# Übung 2.2: Room 3 + SQLite-Treiber
+androidx-room-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room" }
+androidx-room-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
+androidx-sqlite-web = { module = "androidx.sqlite:sqlite-web", version.ref = "sqlite" }
+
+[plugins]
+# ... existing plugins ...
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+androidx-room = { id = "androidx.room3", version.ref = "room" }
+```
+
+### Schritt 2 (Übung 1.2): `shared/build.gradle.kts` erweitern
+
+```kotlin
+plugins {
+    // ... existing plugins ...
+    alias(libs.plugins.kotlinSerialization)
+}
+
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            // ... existing dependencies ...
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.contentNegotiation)
+            implementation(libs.ktor.serialization.kotlinxJson)
+            implementation(libs.ktor.client.logging)
+            implementation(libs.kotlinx.serialization.json)
+        }
+        androidMain.dependencies {
+            implementation(libs.ktor.client.okhttp)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
+        }
+        jvmMain.dependencies {
+            implementation(libs.ktor.client.okhttp)
+        }
+        jsMain.dependencies {
+            implementation(libs.ktor.client.js)
+        }
+        wasmJsMain.dependencies {
+            implementation(libs.ktor.client.js)
+        }
+    }
+}
+```
+
+### Schritt 3 (Übung 2.2): Room 3 einbinden
+
+Room 3 unterstützt alle unsere Targets — die Runtime kommt daher nach `commonMain`, nur die **Treiber** sind Plattform-Sache (Modul 7.2). Der KSP-Compiler wird pro Target registriert:
+
+```kotlin
+plugins {
+    // ... existing plugins ...
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.androidx.room)
+}
+
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            // ... existing dependencies ...
+            implementation(libs.androidx.room.runtime)
+        }
+        androidMain.dependencies { implementation(libs.androidx.sqlite.bundled) }
+        iosMain.dependencies { implementation(libs.androidx.sqlite.bundled) }
+        jvmMain.dependencies { implementation(libs.androidx.sqlite.bundled) }
+        jsMain.dependencies { implementation(libs.androidx.sqlite.web) }      // nur für den Bonus (Web-Treiber)
+        wasmJsMain.dependencies { implementation(libs.androidx.sqlite.web) }  // nur für den Bonus (Web-Treiber)
+    }
+}
+
+room3 {
+    schemaDirectory("$projectDir/schemas")
+}
+
+dependencies {
+    add("kspAndroid", libs.androidx.room.compiler)
+    add("kspJvm", libs.androidx.room.compiler)
+    add("kspIosArm64", libs.androidx.room.compiler)
+    add("kspIosSimulatorArm64", libs.androidx.room.compiler)
+    // Auch ohne Web-Treiber Pflicht: Room-Code in commonMain kompiliert für ALLE Targets,
+    // der Compiler muss die Database-Constructor-actuals also auch für JS/Wasm generieren.
+    add("kspJs", libs.androidx.room.compiler)
+    add("kspWasmJs", libs.androidx.room.compiler)
+}
+```
+
+---
+
+## Anhang B: Spickzettel — Kotlin kompakt
+
+Für alle, deren Kotlin etwas eingestaubt ist — die Idiome, die in unseren Übungen ständig vorkommen:
+
+```kotlin
+// val = read-only, var = mutable — default to val
+val city = "Berlin"
+
+// Data class: equals/hashCode/copy for free — our models & DTOs
+data class CurrentWeather(val temperature: Double, val windSpeed: Double)
+
+// Null safety: ?. safe call, ?: default, let for "if not null"
+val temp = weather?.temperature ?: 0.0
+
+// when as expression — exhaustive over sealed types (compiler-checked!)
+val label = when (state) {
+    is WeatherUiState.Loading -> "…"
+    is WeatherUiState.Success -> "${state.weather.temperature} °C"
+    is WeatherUiState.Error -> state.message
+}
+
+// Trailing lambda — the syntax behind Compose & coroutine builders
+scope.launch { refresh() }
+Button(onClick = { vm.refresh() }) { Text("Reload") }
+
+// Extension function — mapping DTO → domain model
+fun ForecastDto.toDomain(): CurrentWeather =
+    CurrentWeather(current.temperature, current.windSpeed)
+
+// suspend: may pause without blocking — only callable from coroutines
+suspend fun fetchForecast(lat: Double, lon: Double): ForecastDto
+
+// object = singleton, companion object = "statics"
+object AppDependencies { val repository = ... }
+```
+
+> **Faustregel:**
+> Wenn im Workshop eine Zeile Kotlin unklar ist: sofort fragen — die Syntax soll nie im Weg zum eigentlichen Thema (Multiplatform!) stehen.
