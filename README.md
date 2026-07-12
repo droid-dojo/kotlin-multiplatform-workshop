@@ -1,86 +1,100 @@
-# 🧪 Lab 2 — Übung 2.1: Shared ViewModel & Compose UI
+# 🧪 Lab 2 — Übung 2.2: Offline-First — Datenhaltung mit Room
 
-**Willkommen zu Tag 2!** Dieser Branch entspricht dem Endstand von Tag 1 (`lab-1-final`).
+**Dieser Branch enthält die Musterlösung von Übung 2.1.**
 
-Unsere Netzwerk-Schicht funktioniert — aber die UI ist noch Quick & Dirty: ein `LaunchedEffect` mit `try`/`catch` direkt in der Composable. Heute bauen wir daraus eine echte Architektur: **ein Jetpack ViewModel mit StateFlow, geteilt über alle Plattformen** — plus eine Compose-UI, die jeden Zustand sauber behandelt.
+Unsere App hat jetzt Architektur — aber kein Gedächtnis: Flugmodus an, App starten → Fehler-Screen. In dieser Übung bekommt sie eine **Room-Datenbank als Single Source of Truth**: Die UI liest nur noch aus der DB, das Netzwerk aktualisiert sie. Einmal geschrieben, läuft das auf Android, iOS und Desktop — und dank einer sauberen Abstraktion bleibt auch das Web funktionsfähig.
 
-> 📘 Die Theorie zu dieser Übung finden Sie im [HANDOUT.md](HANDOUT.md), **Modul 5** (Coroutines, Flow & ViewModels) und **Modul 6** (UI-Integration).
+> 📘 Die Theorie zu dieser Übung finden Sie im [HANDOUT.md](HANDOUT.md), **Modul 7** (Room). Die Gradle-Einträge stehen in **Anhang A, Schritt 3**.
 
 ---
 
 ## 🔍 Die Ausgangslage
 
-Werfen Sie einen Blick in `App.kt`:
+`WeatherRepository` ist bisher nur ein Durchlauferhitzer:
 
 ```kotlin
-LaunchedEffect(Unit) {
-    weatherText = try { ... } catch (e: Exception) { "Fehler: ${e.message}" }
-}
+suspend fun currentWeather(): CurrentWeather =
+    api.currentWeather(BERLIN_LATITUDE, BERLIN_LONGITUDE)
 ```
 
-Drei Probleme: Der State lebt in der UI (überlebt keine Recomposition-Grenzen), Laden/Fehler/Erfolg sind nur Strings statt Typen, und testbar ist hier nichts. Auf Android würden Sie jetzt ein ViewModel schreiben — **genau das tun wir, nur eben einmal für alle Plattformen.**
+Kein Netz → Exception → Error-Screen. Eine Enterprise-App zeigt stattdessen den **letzten bekannten Stand**. Und weil wir in KMP sind, lösen wir das einmal — nicht einmal pro Plattform.
 
 ## 🎯 Das Ziel
 
-* Ein `WeatherViewModel : ViewModel()` in `commonMain` mit `StateFlow<WeatherUiState>`.
-* Ein `sealed interface WeatherUiState` — der Compiler erzwingt die Behandlung aller Zustände.
-* Ein `WeatherScreen`, der auf Android, Desktop und im Web identisch läuft.
+* Eine Room-Datenbank (`Entity`, `DAO`, `Database`) in `commonMain` — mit Kotlin-2.x-Gefühl: `suspend` und `Flow`, keine blockierenden Aufrufe.
+* Ein `WeatherCache`-Interface mit **Room-Implementierung** (Android, iOS, Desktop) und **In-Memory-Implementierung** (Web) — die Faustregel aus Modul 3.2 in Aktion.
+* Das Repository wird zur SSOT-Schicht: UI beobachtet die DB, das Netz füllt sie.
 
 ## 🛠 Die Aufgaben im Detail
 
-### Schritt 1: Der UI-Zustand als Typ
+### Schritt 1: Dependencies & Plugins
 
-Modellieren Sie im `weather`-Package:
+[HANDOUT.md, Anhang A, Schritt 3](HANDOUT.md#schritt-3-übung-22-room-3-einbinden): **KSP** und das **Room-Plugin** (`androidx.room3`) einbinden, `room3-runtime` nach `commonMain`, die Treiber (`sqlite-bundled` / `sqlite-web`) in die Plattform-Source-Sets, KSP pro Target registrieren. Sync!
+
+### Schritt 2: Entity & DAO
+
+Im `weather`-Package: eine `WeatherEntity` (`locationKey` als `@PrimaryKey`, dazu Temperatur, Wind, Weather-Code, Zeitstempel) und ein `WeatherDao`:
 
 ```kotlin
-sealed interface WeatherUiState {
-    data object Loading : WeatherUiState
-    data class Success(val weather: CurrentWeather) : WeatherUiState
-    data class Error(val message: String) : WeatherUiState
-}
+@Upsert suspend fun upsert(entity: WeatherEntity)
+@Query("...") fun observe(key: String): Flow<WeatherEntity?>
 ```
 
-### Schritt 2: Das Repository
+Plus Mapping-Extensions `WeatherEntity.toDomain()` und `CurrentWeather.toEntity(key)`.
 
-Ziehen Sie eine dünne Schicht zwischen API und ViewModel ein: `class WeatherRepository(private val api: WeatherApi)` mit `suspend fun currentWeather(): CurrentWeather` (Berlin-Koordinaten wandern hierhin). In Übung 2.2 wächst diese Klasse zur Offline-First-Schicht — die UI wird davon nichts merken.
+### Schritt 3: Die Database — mit KMP-Dreh
 
-### Schritt 3: Das ViewModel
+Die `WeatherDatabase` samt `@ConstructedBy` und dem `expect object WeatherDatabaseConstructor` (Vorlage: Handout, Modul 7.3 — die `actual`s generiert der Room-Compiler).
 
-`class WeatherViewModel(private val repository: WeatherRepository) : ViewModel()` — mit privatem `MutableStateFlow`, öffentlichem `StateFlow` und einer `refresh()`-Funktion, die in `viewModelScope.launch { ... }` lädt (Vorlage: Handout, Modul 5.4). Erster Refresh im `init`-Block.
+### Schritt 4: Das WeatherCache-Interface
 
-### Schritt 4: Der WeatherScreen
+Jetzt die Architektur-Entscheidung dieser Übung: Das Repository soll **nicht** wissen, ob dahinter Room oder etwas anderes steckt.
 
-Neue Datei `WeatherScreen.kt` in `commonMain`:
+```kotlin
+interface WeatherCache {
+    fun observe(): Flow<CurrentWeather?>
+    suspend fun store(weather: CurrentWeather)
+}
 
-* ViewModel via `viewModel { WeatherViewModel(...) }` (die Factory-Lambda-Variante — die Library ist schon eingebunden).
-* State einsammeln mit `collectAsStateWithLifecycle()`.
-* Ein `when` über den drei Zuständen: `CircularProgressIndicator`, Fehlertext mit **Retry-Button**, Wetteranzeige mit **Aktualisieren-Button**.
+expect fun createWeatherCache(): WeatherCache
+```
 
-`App()` schrumpft auf `MaterialTheme { WeatherScreen() }` — Greeting, Button und Logo haben ausgedient.
+* `RoomWeatherCache` (in `commonMain`, nutzt das DAO) — zurückgegeben von den `actual`s in `androidMain`, `iosMain`, `jvmMain`. Dort lebt auch der jeweilige `databaseBuilder` (Pfad + `BundledSQLiteDriver`; Android braucht den `Context` — Vorlage im Handout, Modul 7.3).
+* `InMemoryWeatherCache` (ein simpler `MutableStateFlow`) — zurückgegeben von `jsMain`/`wasmJsMain`.
 
-### Schritt 5: Auf alle Plattformen
+**Android-Detail:** Der `Context` kommt per Init-Funktion aus der App: `initWeatherDatabase(applicationContext)` in `MainActivity.onCreate()`, vor `setContent`.
 
-Starten Sie Desktop (`hotRun --auto`), Android und Web. **Testen Sie den Error-Zustand wirklich:** Netzwerk kappen (Flugmodus / WLAN aus), App starten → Fehlermeldung mit Retry → Netz an → Retry → Daten. Kein Neustart nötig.
+### Schritt 5: Repository & ViewModel umbauen
 
-### Bonus: Der WMO-Code wird lesbar
+* `WeatherRepository`: `fun observeWeather(): Flow<CurrentWeather?>` (aus dem Cache) + `suspend fun refresh()` (API → Cache). Die API wird **nie mehr direkt** an die UI durchgereicht.
+* `WeatherViewModel`: sammelt im `init` den Cache-Flow ein (`Success`, sobald Daten da sind) und stößt `refresh()` an. Schlägt der Refresh fehl, obwohl gecachte Daten da sind: Daten **stehen lassen** — der Fehler-Screen ist nur noch für den Kaltstart ohne Cache.
 
-`weatherCode` ist bisher eine nackte Zahl. Schreiben Sie eine Übersetzung (WMO-Codes: 0 = klar, 1–3 = Wolken, 45/48 = Nebel, 51–67 = Regen, 71–77 = Schnee, 80–82 = Schauer, 95+ = Gewitter) — mit Emoji wird's hübsch: ☀️ 🌤 🌫 🌧 ❄️ ⛈
+### Schritt 6: Der Offline-Beweis
+
+1. App auf dem Desktop starten, Wetter laden, App **beenden**.
+2. Netzwerk kappen, App neu starten → **letzter Stand erscheint**, kein Fehler-Screen.
+3. Gleiche Probe auf Android (Flugmodus).
+
+### Bonus: Room im Browser
+
+Room 3 kann auch das Web-Target (Handout, Modul 7.2): `WebWorkerSQLiteDriver` aus `androidx.sqlite:sqlite-web` persistiert ins Origin Private File System. Wer schnell fertig ist, ersetzt den `InMemoryWeatherCache` — und hat *eine* Datenbank auf fünf Plattformen.
 
 ## ✅ Definition of Done
 
-- [ ] `App()` enthält keinen `LaunchedEffect` und kein `try`/`catch` mehr — nur Theme + `WeatherScreen`.
-- [ ] `WeatherViewModel` und `WeatherUiState` liegen in `commonMain` — null plattformspezifischer Code.
-- [ ] Das `when` im Screen ist **exhaustiv** (kein `else`-Zweig!).
-- [ ] Der Flugmodus-Test funktioniert: Error-State → Retry → Success, ohne App-Neustart.
-- [ ] Desktop, Android und Web zeigen dieselbe UI.
+- [ ] Entity, DAO, Database und `RoomWeatherCache` liegen in `commonMain` — kein DB-Code doppelt.
+- [ ] Alle DAO-Funktionen sind `suspend` oder liefern `Flow` — Room 3 lässt Ihnen keine Wahl.
+- [ ] Das Repository kennt nur noch `WeatherCache` — Room taucht in seiner Signatur nicht auf.
+- [ ] Der Offline-Beweis (Schritt 6) gelingt auf Desktop **und** Android.
+- [ ] Das Web-Target kompiliert und läuft weiter (In-Memory oder Bonus).
+- [ ] `schemas/` enthält nach dem Build das exportierte Schema (v1) — und wandert mit ins Git.
 
 ## 💡 Tipps
 
-* `viewModel { ... }` kommt aus `androidx.lifecycle.viewmodel.compose` — die KMP-Variante steckt seit Projektbeginn in den Dependencies.
-* `collectAsStateWithLifecycle()` statt `collectAsState()` — auf Android pausiert das Sammeln im Hintergrund, auf den anderen Targets verhält es sich identisch.
-* Bauen Sie die drei Zustände zuerst auf dem Desktop mit Hot Reload — mit einem hartkodierten `WeatherUiState.Error("Test")` sehen Sie jeden Zweig sofort.
-* Fehlt im `when` ein Zustand, sagt es Ihnen der Compiler — genau dafür haben wir das `sealed interface`.
+* Meldet KSP "actual object … not found": Der Room-Compiler ist für dieses Target nicht registriert — `dependencies`-Block gegen Anhang A prüfen.
+* Der `databaseBuilder` gehört **nicht** ins Interface — er ist ein Implementierungsdetail der Room-Seite. Das Interface spricht Domain (`CurrentWeather`), nie Entities.
+* `@Upsert` statt `@Insert(onConflict = REPLACE)` — kürzer und ohne Lösch-Semantik.
+* Der Flow aus `observe()` feuert bei jedem `upsert` neu — genau deshalb braucht das ViewModel nach dem Refresh **keinen** manuellen State-Update mehr.
 
 ---
 
-**Fertig?** Die Musterlösung — und damit die Aufgabenstellung für **Übung 2.2 (Offline-First mit Room)** — finden Sie im Branch `lab-2-uebung-2.2`.
+**Fertig?** Die Musterlösung — und damit die Aufgabenstellung für **Übung 2.3 (Fixing-Task)** — finden Sie im Branch `lab-2-uebung-2.3`. Dort erwartet Sie ein Build, den ein Kollege "nur auf dem Desktop getestet" hat …
