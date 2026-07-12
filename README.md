@@ -1,100 +1,84 @@
-# 🧪 Lab 2 — Übung 2.2: Offline-First — Datenhaltung mit Room
+# 🧪 Lab 2 — Übung 2.3: Fixing-Task — der Build ist rot!
 
-**Dieser Branch enthält die Musterlösung von Übung 2.1.**
+**Dieser Branch enthält die Musterlösung von Übung 2.2** — plus ein frisches Feature aus dem Team: eine „Stand: 10:15 Uhr"-Anzeige unter dem Wetter. Der Kollege schwört, es funktioniert. Er hat es auf dem Desktop getestet.
 
-Unsere App hat jetzt Architektur — aber kein Gedächtnis: Flugmodus an, App starten → Fehler-Screen. In dieser Übung bekommt sie eine **Room-Datenbank als Single Source of Truth**: Die UI liest nur noch aus der DB, das Netzwerk aktualisiert sie. Einmal geschrieben, läuft das auf Android, iOS und Desktop — und dank einer sauberen Abstraktion bleibt auch das Web funktionsfähig.
+```bash
+./gradlew :shared:compileKotlinJvm      # BUILD SUCCESSFUL ✅
+./gradlew :shared:compileKotlinWasmJs   # BUILD FAILED ❌
+```
 
-> 📘 Die Theorie zu dieser Übung finden Sie im [HANDOUT.md](HANDOUT.md), **Modul 7** (Room). Die Gradle-Einträge stehen in **Anhang A, Schritt 3**.
+Willkommen im KMP-Alltag: **Code, der in `commonMain` liegt, aber nicht common ist.** Diese Übung ist bewusst klein — sie trainiert den Reflex, den Sie aus diesem Workshop mitnehmen sollen.
+
+> 📘 Werkzeuge für diese Übung: [HANDOUT.md](HANDOUT.md), **Modul 3** (`expect`/`actual` & native APIs) — plus alles, was Sie seit Übung 1.1 gelernt haben.
 
 ---
 
 ## 🔍 Die Ausgangslage
 
-`WeatherRepository` ist bisher nur ein Durchlauferhitzer:
+Schauen Sie ans Ende von `WeatherScreen.kt`:
 
 ```kotlin
-suspend fun currentWeather(): CurrentWeather =
-    api.currentWeather(BERLIN_LATITUDE, BERLIN_LONGITUDE)
+// Tested on desktop, works fine — ship it!
+private fun formatUpdatedAt(isoTime: String): String {
+    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
+    ...
+}
 ```
 
-Kein Netz → Exception → Error-Screen. Eine Enterprise-App zeigt stattdessen den **letzten bekannten Stand**. Und weil wir in KMP sind, lösen wir das einmal — nicht einmal pro Plattform.
+`java.text` existiert auf der JVM (Desktop **und** Android — deshalb fiel es lokal nicht auf), aber nicht auf iOS, nicht im Browser. Der Compiler sagt es deutlich:
+
+```
+e: WeatherScreen.kt: Unresolved reference 'java'.
+```
+
+Warum kompiliert der Desktop trotzdem? `commonMain` wird **pro Target** mitkompiliert — gegen die Bibliotheken *dieses* Targets. Auf der JVM löst sich `java.text` auf, überall sonst nicht. Genau deshalb prüft eine ehrliche CI immer **alle** Targets (Modul 2.3).
 
 ## 🎯 Das Ziel
 
-* Eine Room-Datenbank (`Entity`, `DAO`, `Database`) in `commonMain` — mit Kotlin-2.x-Gefühl: `suspend` und `Flow`, keine blockierenden Aufrufe.
-* Ein `WeatherCache`-Interface mit **Room-Implementierung** (Android, iOS, Desktop) und **In-Memory-Implementierung** (Web) — die Faustregel aus Modul 3.2 in Aktion.
-* Das Repository wird zur SSOT-Schicht: UI beobachtet die DB, das Netz füllt sie.
+* Alle Targets kompilieren wieder — `java.*` ist aus `commonMain` verschwunden.
+* Die „Stand: …"-Anzeige funktioniert weiterhin, auf jeder Plattform mit der **nativen Datums-API**.
 
 ## 🛠 Die Aufgaben im Detail
 
-### Schritt 1: Dependencies & Plugins
+### Schritt 1: Diagnose
 
-[HANDOUT.md, Anhang A, Schritt 3](HANDOUT.md#schritt-3-übung-22-room-3-einbinden): **KSP** und das **Room-Plugin** (`androidx.room3`) einbinden, `room3-runtime` nach `commonMain`, die Treiber (`sqlite-bundled` / `sqlite-web`) in die Plattform-Source-Sets, KSP pro Target registrieren. Sync!
+Führen Sie den Wasm-Build aus und lesen Sie den Fehler. Überlegen Sie **vor** dem Coden: Ist das ein Fall für `expect`/`actual` oder für ein Interface (Faustregel, Modul 3.2)? Kleine, zustandslose Blattfunktion → Sie kennen die Antwort.
 
-### Schritt 2: Entity & DAO
+### Schritt 2: Der Kontrakt
 
-Im `weather`-Package: eine `WeatherEntity` (`locationKey` als `@PrimaryKey`, dazu Temperatur, Wind, Weather-Code, Zeitstempel) und ein `WeatherDao`:
+Ersetzen Sie die private Funktion durch eine `expect fun formatUpdatedAt(isoTime: String): String` in einer eigenen Datei im `weather`-Package. Der Compiler listet Ihnen jetzt alle Targets auf, die ein `actual` fordern — Ihre To-do-Liste.
 
-```kotlin
-@Upsert suspend fun upsert(entity: WeatherEntity)
-@Query("...") fun observe(key: String): Flow<WeatherEntity?>
+### Schritt 3: Fünf actuals
+
+| Source Set | Native API (Startpunkt) |
+| --- | --- |
+| `androidMain`, `jvmMain` | `java.time.LocalDateTime` + `DateTimeFormatter` |
+| `iosMain` | `platform.Foundation.NSDateFormatter` (`dateFromString`, `stringFromDate`) |
+| `jsMain`, `wasmJsMain` | `js("new Date(iso).toLocaleTimeString(...)")` |
+
+Der Zeitstempel kommt von Open-Meteo als `"2026-07-13T10:15"` — lokale Zeit, keine Zone.
+
+### Schritt 4: Der Beweis
+
+```bash
+./gradlew :shared:compileKotlinJvm :shared:compileKotlinJs :shared:compileKotlinWasmJs :androidApp:assembleDebug
 ```
 
-Plus Mapping-Extensions `WeatherEntity.toDomain()` und `CurrentWeather.toEntity(key)`.
-
-### Schritt 3: Die Database — mit KMP-Dreh
-
-Die `WeatherDatabase` samt `@ConstructedBy` und dem `expect object WeatherDatabaseConstructor` (Vorlage: Handout, Modul 7.3 — die `actual`s generiert der Room-Compiler).
-
-### Schritt 4: Das WeatherCache-Interface
-
-Jetzt die Architektur-Entscheidung dieser Übung: Das Repository soll **nicht** wissen, ob dahinter Room oder etwas anderes steckt.
-
-```kotlin
-interface WeatherCache {
-    fun observe(): Flow<CurrentWeather?>
-    suspend fun store(weather: CurrentWeather)
-}
-
-expect fun createWeatherCache(): WeatherCache
-```
-
-* `RoomWeatherCache` (in `commonMain`, nutzt das DAO) — zurückgegeben von den `actual`s in `androidMain`, `iosMain`, `jvmMain`. Dort lebt auch der jeweilige `databaseBuilder` (Pfad + `BundledSQLiteDriver`; Android braucht den `Context` — Vorlage im Handout, Modul 7.3).
-* `InMemoryWeatherCache` (ein simpler `MutableStateFlow`) — zurückgegeben von `jsMain`/`wasmJsMain`.
-
-**Android-Detail:** Der `Context` kommt per Init-Funktion aus der App: `initWeatherDatabase(applicationContext)` in `MainActivity.onCreate()`, vor `setContent`.
-
-### Schritt 5: Repository & ViewModel umbauen
-
-* `WeatherRepository`: `fun observeWeather(): Flow<CurrentWeather?>` (aus dem Cache) + `suspend fun refresh()` (API → Cache). Die API wird **nie mehr direkt** an die UI durchgereicht.
-* `WeatherViewModel`: sammelt im `init` den Cache-Flow ein (`Success`, sobald Daten da sind) und stößt `refresh()` an. Schlägt der Refresh fehl, obwohl gecachte Daten da sind: Daten **stehen lassen** — der Fehler-Screen ist nur noch für den Kaltstart ohne Cache.
-
-### Schritt 6: Der Offline-Beweis
-
-1. App auf dem Desktop starten, Wetter laden, App **beenden**.
-2. Netzwerk kappen, App neu starten → **letzter Stand erscheint**, kein Fehler-Screen.
-3. Gleiche Probe auf Android (Flugmodus).
-
-### Bonus: Room im Browser
-
-Room 3 kann auch das Web-Target (Handout, Modul 7.2): `WebWorkerSQLiteDriver` aus `androidx.sqlite:sqlite-web` persistiert ins Origin Private File System. Wer schnell fertig ist, ersetzt den `InMemoryWeatherCache` — und hat *eine* Datenbank auf fünf Plattformen.
+Und einmal Desktop + Web starten: „Stand: … Uhr" muss auf beiden erscheinen.
 
 ## ✅ Definition of Done
 
-- [ ] Entity, DAO, Database und `RoomWeatherCache` liegen in `commonMain` — kein DB-Code doppelt.
-- [ ] Alle DAO-Funktionen sind `suspend` oder liefern `Flow` — Room 3 lässt Ihnen keine Wahl.
-- [ ] Das Repository kennt nur noch `WeatherCache` — Room taucht in seiner Signatur nicht auf.
-- [ ] Der Offline-Beweis (Schritt 6) gelingt auf Desktop **und** Android.
-- [ ] Das Web-Target kompiliert und läuft weiter (In-Memory oder Bonus).
-- [ ] `schemas/` enthält nach dem Build das exportierte Schema (v1) — und wandert mit ins Git.
+- [ ] Kein `java.*`-Import mehr in `commonMain` — die Suche nach `java.` in `commonMain` liefert null Treffer.
+- [ ] `formatUpdatedAt` ist ein `expect`/`actual`-Paar mit fünf Implementierungen.
+- [ ] Alle vier lokal baubaren Targets kompilieren; das iOS-`actual` steht (Review im Plenum).
+- [ ] Desktop und Web zeigen die formatierte Uhrzeit.
 
 ## 💡 Tipps
 
-* Meldet KSP "actual object … not found": Der Room-Compiler ist für dieses Target nicht registriert — `dependencies`-Block gegen Anhang A prüfen.
-* Der `databaseBuilder` gehört **nicht** ins Interface — er ist ein Implementierungsdetail der Room-Seite. Das Interface spricht Domain (`CurrentWeather`), nie Entities.
-* `@Upsert` statt `@Insert(onConflict = REPLACE)` — kürzer und ohne Lösch-Semantik.
-* Der Flow aus `observe()` feuert bei jedem `upsert` neu — genau deshalb braucht das ViewModel nach dem Refresh **keinen** manuellen State-Update mehr.
+* `java.time` statt `SimpleDateFormat` auf JVM/Android — die alte Klasse ist nicht threadsafe; das war schon vor KMP ein Smell.
+* In produktivem Code wäre **kotlinx-datetime** die erste Wahl: eine Multiplatform-Library statt fünf `actual`s. Hier bauen wir die `actual`s bewusst von Hand — Sie sollen einmal alle fünf nativen APIs angefasst haben.
+* Android und Desktop teilen sich identischen JVM-Code? Für Neugierige: Ein eigener Zwischen-Source-Set (Modul 2.2) würde das Duplikat eliminieren.
 
 ---
 
-**Fertig?** Die Musterlösung — und damit die Aufgabenstellung für **Übung 2.3 (Fixing-Task)** — finden Sie im Branch `lab-2-uebung-2.3`. Dort erwartet Sie ein Build, den ein Kollege "nur auf dem Desktop getestet" hat …
+**Fertig?** Die Musterlösung finden Sie im Branch `lab-2-final` — dem Endstand des Workshops. 🏁
