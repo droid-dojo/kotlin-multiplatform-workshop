@@ -4,15 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class WeatherViewModel(
     private val repository: WeatherRepository,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
-    val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
+    // Kotlin 2.4 explicit backing field - mutable inside the ViewModel, read-only StateFlow outside
+    val uiState: StateFlow<WeatherUiState>
+        field = MutableStateFlow(WeatherUiState.Loading)
 
     init {
         refresh()
@@ -20,8 +20,8 @@ class WeatherViewModel(
 
     fun refresh() {
         viewModelScope.launch {
-            _uiState.value = WeatherUiState.Loading
-            _uiState.value = try {
+            uiState.value = WeatherUiState.Loading
+            uiState.value = try {
                 WeatherUiState.Success(repository.currentWeather())
             } catch (e: Exception) {
                 WeatherUiState.Error(e.message ?: "Unbekannter Fehler")

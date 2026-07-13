@@ -38,6 +38,9 @@ fun WeatherScreen(
     }
 }
 
+// Your town goes here - the label shown in the UI
+private const val LOCATION_LABEL = "Mitte Deutschlands"
+
 @Composable
 private fun WeatherContent(weather: CurrentWeather, onRefresh: () -> Unit) {
     Column(
@@ -46,7 +49,7 @@ private fun WeatherContent(weather: CurrentWeather, onRefresh: () -> Unit) {
     ) {
         Text(weather.condition.emoji, style = MaterialTheme.typography.displayLarge)
         Text("${weather.temperature} °C", style = MaterialTheme.typography.displayMedium)
-        Text("Berlin — ${weather.condition.label}", style = MaterialTheme.typography.titleMedium)
+        Text("$LOCATION_LABEL - ${weather.condition.label}", style = MaterialTheme.typography.titleMedium)
         Text("Wind ${weather.windSpeed} km/h", style = MaterialTheme.typography.bodyMedium)
         Button(onClick = onRefresh) {
             Text("Aktualisieren")

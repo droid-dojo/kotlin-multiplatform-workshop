@@ -5,10 +5,11 @@ class WeatherRepository(
 ) {
 
     suspend fun currentWeather(): CurrentWeather =
-        api.currentWeather(BERLIN_LATITUDE, BERLIN_LONGITUDE)
+        api.currentWeather(LATITUDE, LONGITUDE)
 
     private companion object {
-        const val BERLIN_LATITUDE = 52.52
-        const val BERLIN_LONGITUDE = 13.41
+        // Your town goes here - these coordinates mark the geographic centre of Germany
+        const val LATITUDE = 51.16
+        const val LONGITUDE = 10.45
     }
 }
