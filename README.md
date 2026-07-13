@@ -22,7 +22,7 @@ expect fun getPlatform(): Platform
 
 Ein Interface, eine `expect`-Funktion — und in `androidMain`, `iosMain`, `jvmMain`, `jsMain` und `wasmJsMain` jeweils ein `actual`, das den Plattform-Namen liefert. Die `App()`-Composable in `commonMain` zeigt ihn nach einem Button-Klick an.
 
-Unsere Weather App wird später die **Zeitzone des Geräts** brauchen (die Open-Meteo API liefert Zeitstempel pro Zeitzone). Eine Zeitzone auslesen kann jede Plattform — aber jede anders: `android.icu.util.TimeZone` auf Android, `java.util.TimeZone` auf der JVM, `NSTimeZone` auf iOS, `Intl` im Browser. Ein Fall wie aus dem Lehrbuch für `expect`/`actual`.
+Unsere Weather App wird später die **Zeitzone des Geräts** brauchen (die [Open-Meteo](https://open-meteo.com) API liefert Zeitstempel pro Zeitzone). Eine Zeitzone auslesen kann jede Plattform — aber jede anders: `android.icu.util.TimeZone` auf Android, `java.util.TimeZone` auf der JVM, `NSTimeZone` auf iOS, `Intl` im Browser. Ein Fall wie aus dem Lehrbuch für `expect`/`actual`.
 
 ## 🎯 Das Ziel
 
