@@ -12,7 +12,7 @@ class WeatherViewModel(
 
     // Kotlin 2.4 explicit backing field - mutable inside the ViewModel, read-only StateFlow outside
     val uiState: StateFlow<WeatherUiState>
-        field = MutableStateFlow(WeatherUiState.Loading)
+        field = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
 
     init {
         refresh()
