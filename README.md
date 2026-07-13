@@ -2,7 +2,7 @@
 
 **Willkommen zu Tag 2!** Dieser Branch entspricht dem Endstand von Tag 1 (`lab-1-final`).
 
-Unsere Netzwerk-Schicht funktioniert — aber die UI ist noch Quick & Dirty: ein `LaunchedEffect` mit `try`/`catch` direkt in der Composable. Heute bauen wir daraus eine echte Architektur: **ein Jetpack ViewModel mit StateFlow, geteilt über alle Plattformen** — plus eine Compose-UI, die jeden Zustand sauber behandelt.
+Unsere Netzwerk-Schicht funktioniert — aber die UI ist noch Quick & Dirty: ein `LaunchedEffect` mit `try`/`catch` direkt in der Composable. Heute bauen wir daraus eine echte Architektur: **ein [Jetpack ViewModel](https://developer.android.com/topic/libraries/architecture/viewmodel) mit StateFlow, geteilt über alle Plattformen** — plus eine Compose-UI, die jeden Zustand sauber behandelt.
 
 > 📘 Die Theorie zu dieser Übung finden Sie im [HANDOUT.md](HANDOUT.md), **Modul 5** (Coroutines, Flow & ViewModels) und **Modul 6** (UI-Integration).
 
