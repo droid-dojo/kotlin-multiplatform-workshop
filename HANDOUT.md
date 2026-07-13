@@ -8,7 +8,7 @@ Die Leitfrage des Workshops: **Was teilen wir — und was nicht?** KMP ist kein 
 
 ### Drei Hinweise vorab
 
-1. **Praxis in Compose Multiplatform:** Alle Übungen laufen auf **Android, Desktop und im Web** — dort haben wir die schnellsten Feedback-Schleifen (Desktop mit Hot Reload!). Der **iOS-/SwiftUI-Teil wird als Code-Showcase behandelt**: Wir schreiben den iOS-Code mit und besprechen ihn im Detail, kompilieren ihn aber nicht live — dafür wäre Mac-Hardware nötig. Wer ein MacBook dabei hat, kann selbstverständlich mitbauen.
+1. **Praxis in [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/):** Alle Übungen laufen auf **Android, Desktop und im Web** — dort haben wir die schnellsten Feedback-Schleifen (Desktop mit Hot Reload!). Der **iOS-/SwiftUI-Teil wird als Code-Showcase behandelt**: Wir schreiben den iOS-Code mit und besprechen ihn im Detail, kompilieren ihn aber nicht live — dafür wäre Mac-Hardware nötig. Wer ein MacBook dabei hat, kann selbstverständlich mitbauen.
 2. **Kotlin-Vorkenntnisse:** Der Workshop setzt Grundkenntnisse in Kotlin voraus (`val`/`var`, `data class`, Null Safety, Lambdas). Falls die Runde hier unterschiedlich aufgestellt ist, schieben wir zu Beginn ein kompaktes Kotlin-Modul ein — der Spickzettel dazu steht in **Anhang B**. In dem Fall straffen wir dafür an anderer Stelle.
 3. **Arbeitsweise:** Die Aufgabenstellung der aktuellen Übung steht immer im `README.md` des Branches, auf dem Sie gerade arbeiten. Der jeweils nächste Branch enthält die Musterlösung — und gleichzeitig die Aufgabenstellung für die nächste Übung.
 
@@ -84,7 +84,7 @@ Das unterscheidet KMP fundamental von den Alternativen:
 | Läuft auf iOS als | **Nativer LLVM-Code** | Dart-Runtime (AOT) | JS-Engine + Bridge/JSI |
 | UI | Nativ **oder** Compose | Eigenes Rendering (Impeller) | Native Views via Bridge |
 | Adoption inkrementell? | **Ja — pro Schicht** | Schwer (App-Rewrite) | Teilweise |
-| Interop mit Platt­form-APIs | Direkt (kein Wrapper) | Über Platform Channels | Über Native Modules |
+| Interop mit Plattform-APIs | Direkt (kein Wrapper) | Über Platform Channels | Über Native Modules |
 
 Für iOS heißt das konkret: Das Shared Module wird zu einem ganz normalen **Framework** kompiliert, das Xcode einbindet wie jede Swift-Library. Der iOS-Entwickler sieht Objective-C/Swift-APIs — dass dahinter Kotlin steckt, ist ein Implementierungsdetail (mehr dazu in Modul 3).
 
@@ -121,11 +121,11 @@ KMP ist dem Experimentierstadium lange entwachsen — die beiden relevanten Play
 **JetBrains** (erfinden Kotlin und treiben KMP):
 * **Kotlin Multiplatform ist stabil**, Kotlin/Wasm auf der Zielgeraden.
 * **Compose Multiplatform:** iOS-Support ist **seit Mai 2025 stabil** (CMP 1.8), Desktop stabil, Web (Wasm) im Beta-Stadium und in schneller Entwicklung. Seit CMP 1.10 ist **Compose Hot Reload** stabil und standardmäßig aktiv — davon profitieren wir in jeder Übung.
-* Die Kern-Libraries — **Ktor, kotlinx.coroutines, kotlinx.serialization, kotlinx-datetime** — sind von Haus aus multiplattform.
+* Die Kern-Libraries — **[Ktor](https://ktor.io), [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines), [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization), [kotlinx-datetime](https://github.com/Kotlin/kotlinx-datetime)** — sind von Haus aus multiplattform.
 
 **Google** (offizieller KMP-Support seit I/O 2024):
 * Google unterstützt KMP offiziell für das **Teilen von Business-Logik zwischen Android und iOS** — und nutzt es selbst (u.a. Google Workspace).
-* Die wichtigsten **Jetpack-Libraries sind KMP-fähig**: Room, DataStore, ViewModel, Lifecycle, Paging — genau der Stack, den Android-Teams ohnehin kennen. Für uns heißt das: Wissen aus der Android-Welt (Room!) nehmen wir 1:1 mit auf die anderen Plattformen.
+* Die wichtigsten **[Jetpack-Libraries sind KMP-fähig](https://developer.android.com/kotlin/multiplatform)**: [Room](https://developer.android.com/kotlin/multiplatform/room), DataStore, ViewModel, Lifecycle, Paging — genau der Stack, den Android-Teams ohnehin kennen. Für uns heißt das: Wissen aus der Android-Welt (Room!) nehmen wir 1:1 mit auf die anderen Plattformen.
 * Das **Android Gradle Plugin bringt ein eigenes KMP-Library-Plugin** mit (`com.android.kotlin.multiplatform.library`) — Android ist in KMP-Projekten ein Target erster Klasse.
 
 Dazu kommt ein wachsendes Community-Ökosystem — durchsuchbar auf **[klibs.io](https://klibs.io)**, dem JetBrains-Suchportal für KMP-Libraries. Produktiv im Einsatz ist KMP u.a. bei McDonald's, Netflix, Forbes, Bloomberg und Shopify.
@@ -351,7 +351,7 @@ Ktor selbst spricht kein TCP — das delegiert es an eine **Engine**, die pro Ta
 Liegt genau eine Engine am Classpath, findet `HttpClient {}` sie **automatisch** — deshalb steht im Common Code kein Engine-Name. Das ist gelebtes `expect`/`actual`, nur dass Gradle die Auswahl trifft statt des Compilers.
 
 > **Faustregel:**
-> Engine-Wahl ist eine **Integrations­entscheidung, keine Feature-Entscheidung**: `Darwin` respektiert App Transport Security und System-Proxies, `OkHttp` erlaubt das Weiterverwenden vorhandener Interceptor-Infrastruktur, im Browser erbt `Js` die CORS-Regeln der Seite. Das gemeinsame API bleibt identisch.
+> Engine-Wahl ist eine **Integrationsentscheidung, keine Feature-Entscheidung**: `Darwin` respektiert App Transport Security und System-Proxies, `OkHttp` erlaubt das Weiterverwenden vorhandener Interceptor-Infrastruktur, im Browser erbt `Js` die CORS-Regeln der Seite. Das gemeinsame API bleibt identisch.
 
 ### 4.4 Typsichere De-/Serialisierung mit kotlinx.serialization
 
@@ -565,7 +565,7 @@ Genau hier zahlt sich die Theorie aus Modul 3 aus: Das `default:` ist kein Stilf
 
 ### 7.1 Warum Room? (Eine Anpassung der Agenda)
 
-In der ursprünglichen Agenda stand an dieser Stelle SQLDelight — wir arbeiten stattdessen mit **Room 3.0**, und das aus drei Gründen:
+In der ursprünglichen Agenda stand an dieser Stelle [SQLDelight](https://sqldelight.github.io/sqldelight/) — wir arbeiten stattdessen mit **Room 3.0**, und das aus drei Gründen:
 
 1. **Ihr Android-Wissen zählt doppelt:** Room ist der Jetpack-Standard, den Android-Teams ohnehin kennen — `@Entity`, `@Dao`, `@Query` funktionieren in KMP exakt wie gewohnt.
 2. **First-Party-Support:** Room ist seit 2.7 offiziell multiplattform und Teil von Googles KMP-Strategie (Modul 1.4).
@@ -578,7 +578,7 @@ In der ursprünglichen Agenda stand an dieser Stelle SQLDelight — wir arbeiten
 | Web-Support | ja (Web Worker + OPFS) | ja (Web Worker Driver) |
 | Für Android-Teams | kein Umlernen | neues Toolset |
 
-SQLDelight bleibt eine ausgezeichnete Library — wer echtes SQL bevorzugt oder exotischere Targets braucht, greift dort zu. Die Architektur-Muster dieses Moduls (SSOT, Flow aus der DB) sind identisch.
+SQLDelight bleibt eine ausgezeichnete Library — wer echtes SQL bevorzugt oder exotischere Targets braucht, greift dort zu. Die Architektur-Muster dieses Moduls (Single Source of Truth, Flow aus der DB) sind identisch.
 
 ### 7.2 Setup: KSP, Plugin, Treiber
 
@@ -665,12 +665,14 @@ fun createDatabase(): WeatherDatabase =
         .build()
 ```
 
+Fällt Ihnen etwas auf? Die `expect`-Signatur ist **parameterlos** — aber jedes `actual` braucht andere Zutaten: Android einen `Context`, iOS einen Pfad aus `NSFileManager`, das Web einen Worker. Zusätzliche Parameter darf ein `actual` nicht einführen, die Signatur ist Teil des Kontrakts (Modul 3.1). Jede Plattform muss sich ihre Abhängigkeiten also **selbst beschaffen**: iOS und Web fragen direkt ihre System-APIs, aber auf Android gibt es keinen globalen `Context` — er wird beim App-Start **einmal von außen hineingereicht** (etwa in eine Top-Level-Referenz `appContext` in `androidMain`, gesetzt aus `Application.onCreate()`; genau so bauen wir es in Übung 2.2). Dieses Muster — gemeinsame Signatur, plattform-eigene Beschaffung der Abhängigkeiten — ist der Standardweg, wann immer ein `actual` mehr braucht, als die `expect`-Deklaration hergibt.
+
 > **Faustregel:**
 > Room 3.0 ist zum Workshop-Zeitpunkt wenige Wochen alt. Android, iOS und Desktop sind der seit Room 2.7 erprobte Pfad — das Web-Target ist Neuland (Worker-Setup, asynchrone Treiber-APIs) und in der Übung bewusst als **Bonus** markiert. Genau so würde man es auch im Projekt einführen: erprobte Targets zuerst, das neueste Target hinter einem Feature-Branch.
 
 ### 7.4 Offline-First: Die Datenbank als Single Source of Truth
 
-Mit DB und API entsteht das SSOT-Muster — die UI liest **ausschließlich** aus der Datenbank, das Netzwerk *aktualisiert* nur:
+Mit DB und API entsteht das Single-Source-of-Truth-Muster — die UI liest **ausschließlich** aus der Datenbank, das Netzwerk *aktualisiert* nur:
 
 ```kotlin
 // commonMain
@@ -682,7 +684,7 @@ class WeatherRepository(
     fun observeWeather(key: String): Flow<CurrentWeather?> =
         dao.observe(key).map { it?.toDomain() }
 
-    // Network only refreshes the SSOT
+    // Network only refreshes the single source of truth
     suspend fun refresh(key: String, lat: Double, lon: Double) {
         val dto = api.fetchForecast(lat, lon)
         dao.upsert(dto.toEntity(key))
