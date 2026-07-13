@@ -2,7 +2,7 @@
 
 **Willkommen zum Kotlin-Multiplatform-Workshop!**
 
-Ausgangspunkt ist ein frisches KMP-Projekt mit fünf Targets: **Android, iOS, Desktop, Web (JS) und Web (Wasm)**. Es läuft — aber es weiß noch fast nichts über die Plattformen, auf denen es lebt. Das ändern wir jetzt: In dieser Übung lernen Sie das Projekt kennen und schreiben Ihren ersten eigenen `expect`/`actual`-Code, der auf **allen fünf Targets** funktioniert.
+Ausgangspunkt ist ein frisches KMP-Projekt mit fünf Targets: **Android, iOS, Desktop, Web (JS) und Web (Wasm)** — erzeugt mit dem offiziellen [KMP-Wizard](https://kmp.jetbrains.com/?android=true&ios=true&iosui=compose&includeTests=true) von JetBrains. Es läuft — aber es weiß noch fast nichts über die Plattformen, auf denen es lebt. Das ändern wir jetzt: In dieser Übung lernen Sie das Projekt kennen und schreiben Ihren ersten eigenen `expect`/`actual`-Code, der auf **allen fünf Targets** funktioniert.
 
 > 📘 Die Theorie zu dieser Übung finden Sie im [HANDOUT.md](HANDOUT.md), **Modul 2** (Build-System & Source Sets) und **Modul 3** (`expect`/`actual`).
 
@@ -22,7 +22,7 @@ expect fun getPlatform(): Platform
 
 Ein Interface, eine `expect`-Funktion — und in `androidMain`, `iosMain`, `jvmMain`, `jsMain` und `wasmJsMain` jeweils ein `actual`, das den Plattform-Namen liefert. Die `App()`-Composable in `commonMain` zeigt ihn nach einem Button-Klick an.
 
-Unsere Weather App wird später die **Zeitzone des Geräts** brauchen (die Open-Meteo API liefert Zeitstempel pro Zeitzone). Eine Zeitzone auslesen kann jede Plattform — aber jede anders: `java.util.TimeZone` auf JVM/Android, `NSTimeZone` auf iOS, `Intl` im Browser. Ein Fall wie aus dem Lehrbuch für `expect`/`actual`.
+Unsere Weather App wird später die **Zeitzone des Geräts** brauchen (die Open-Meteo API liefert Zeitstempel pro Zeitzone). Eine Zeitzone auslesen kann jede Plattform — aber jede anders: `android.icu.util.TimeZone` auf Android, `java.util.TimeZone` auf der JVM, `NSTimeZone` auf iOS, `Intl` im Browser. Ein Fall wie aus dem Lehrbuch für `expect`/`actual`.
 
 ## 🎯 Das Ziel
 
@@ -73,7 +73,7 @@ Implementieren Sie `timeZoneId` in allen Plattform-Klassen:
 
 | Source Set | Native API (Startpunkt) |
 | --- | --- |
-| `androidMain` | `java.util.TimeZone.getDefault()` |
+| `androidMain` | `android.icu.util.TimeZone.getDefault()` — die ICU-API des Android-Frameworks (ab API 24) |
 | `jvmMain` | `java.util.TimeZone.getDefault()` |
 | `iosMain` | `platform.Foundation.NSTimeZone` → `localTimeZone` |
 | `jsMain` | `js("Intl.DateTimeFormat().resolvedOptions().timeZone")` |
@@ -103,6 +103,7 @@ Erweitern Sie `App.kt` in `commonMain`, sodass unter dem Greeting auch die Zeitz
 * Auf dem JS-Target liefert `js(...)` ein `dynamic` — deklarieren Sie den Rückgabetyp der Funktion explizit als `String`.
 * Wenn der Web-Build meckert, aber der Desktop läuft: Sie haben vermutlich ein `actual` vergessen — die Fehlermeldung nennt Target und erwartete Signatur.
 * Linux/Windows überspringen die iOS-Targets automatisch (Warnung im Log ist okay) — das ist das erwartete Verhalten aus Handout, Modul 2.3.
+* Auf der JVM würde statt `java.util.TimeZone` auch [kotlinx-datetime](https://github.com/Kotlin/kotlinx-datetime) funktionieren (`TimeZone.currentSystemDefault().id`) — die Bibliothek läuft sogar in `commonMain`. Hier greifen wir bewusst pro Plattform auf die native API zu, um den `expect`/`actual`-Kontrakt zu üben.
 
 ---
 
