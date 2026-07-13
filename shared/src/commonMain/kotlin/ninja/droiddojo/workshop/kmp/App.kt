@@ -20,8 +20,10 @@ import kmpworkshop.shared.generated.resources.Res
 import kmpworkshop.shared.generated.resources.compose_multiplatform
 import ninja.droiddojo.workshop.kmp.weather.WeatherApi
 
-private const val BERLIN_LATITUDE = 52.52
-private const val BERLIN_LONGITUDE = 13.41
+// Your town goes here - these coordinates mark the geographic centre of Germany
+private const val LOCATION_LABEL = "Mitte Deutschlands"
+private const val LATITUDE = 51.16
+private const val LONGITUDE = 10.45
 
 @Composable
 @Preview
@@ -42,10 +44,10 @@ fun App() {
                 val greeting = remember { Greeting().greet() }
                 var weatherText by remember { mutableStateOf("Lade Wetter…") }
                 LaunchedEffect(Unit) {
-                    // quick & dirty — proper Loading/Success/Error state comes in exercise 2.1
+                    // quick & dirty - proper Loading/Success/Error state comes in exercise 2.1
                     weatherText = try {
-                        val weather = WeatherApi().currentWeather(BERLIN_LATITUDE, BERLIN_LONGITUDE)
-                        "Berlin: ${weather.temperature} °C, Wind ${weather.windSpeed} km/h"
+                        val weather = WeatherApi().currentWeather(LATITUDE, LONGITUDE)
+                        "$LOCATION_LABEL: ${weather.temperature} °C, Wind ${weather.windSpeed} km/h"
                     } catch (e: Exception) {
                         "Fehler: ${e.message}"
                     }
