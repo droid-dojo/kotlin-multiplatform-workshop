@@ -30,7 +30,7 @@ class WeatherApi(
     }
 }
 
-// No engine named here — each target brings exactly one engine on its classpath
+// No engine named here - each target brings exactly one engine on its classpath
 fun defaultHttpClient(): HttpClient = HttpClient {
     install(ContentNegotiation) {
         json(Json {
