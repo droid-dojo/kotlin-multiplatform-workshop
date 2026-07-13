@@ -1,6 +1,6 @@
-# 🏁 Lab 2 — Final: The Shared App ist fertig!
+# 🏁 Lab 2 - Final: The Shared App ist fertig!
 
-**Dieser Branch enthält die Musterlösung von Übung 2.3** — und damit den Endstand des Workshops. Eine Wetter-App mit geteiltem Networking, geteilter Datenbank, geteiltem State-Management und geteilter UI:
+**Dieser Branch enthält die Musterlösung von Übung 2.3** - und damit den Endstand des Workshops. Eine Wetter-App mit geteiltem Networking, geteilter Datenbank, geteiltem State-Management und geteilter UI:
 
 | Schicht | Technologie | Wo sie lebt |
 | --- | --- | --- |
@@ -10,23 +10,23 @@
 | Netzwerk | [Ktor](https://ktor.io) + [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | `commonMain` + Engine pro Target |
 | Plattform-Zugriffe | `expect`/`actual` | `timeZoneId`, `formatUpdatedAt`, `createWeatherCache` |
 
-Die Plattform-Einstiegspunkte (`androidApp`, `iosApp`, `desktopApp`, `webApp`) sind zusammen keine 100 Zeilen — der Rest ist geteilt.
+Die Plattform-Einstiegspunkte (`androidApp`, `iosApp`, `desktopApp`, `webApp`) sind zusammen keine 100 Zeilen - der Rest ist geteilt.
 
 ## 🔍 Sehenswert in der Lösung von Übung 2.3
 
-* `weather/FormatUpdatedAt.kt` + fünf `actual`s: JVM-Zeit-API, `NSDateFormatter`, Browser-`Date` — einmal quer durch alle nativen SDKs.
-* `git log` dieses Branches: Der „nur auf dem Desktop getestet"-Commit ist absichtlich Teil der Historie. So sieht der Fehler im echten Leben aus — und so schnell ist er mit `expect`/`actual` behoben.
+* `weather/FormatUpdatedAt.kt` + fünf `actual`s: JVM-Zeit-API, `NSDateFormatter`, Browser-`Date` - einmal quer durch alle nativen SDKs.
+* `git log` dieses Branches: Der „nur auf dem Desktop getestet"-Commit ist absichtlich Teil der Historie. So sieht der Fehler im echten Leben aus - und so schnell ist er mit `expect`/`actual` behoben.
 
 ## 🗺 Wie geht es in Ihren Projekten weiter?
 
-Die **Final Roadmap** steht im [HANDOUT.md](HANDOUT.md), **Modul 9**: der etappenweise Migrationspfad von einer Single-Platform-App zu KMP — inklusive Checkliste für den Pilot-Kandidaten in Ihrem Team.
+Die **Final Roadmap** steht im [Handout, Modul 9: Final Roadmap - Der Migrationspfad zu KMP](HANDOUT.md#modul-9-final-roadmap---der-migrationspfad-zu-kmp): der etappenweise Migrationspfad von einer Single-Platform-App zu KMP - inklusive Checkliste für den Pilot-Kandidaten in Ihrem Team.
 
 Wer noch Energie hat:
 
-* **Bonus aus Übung 2.2:** Den `InMemoryWeatherCache` im Web durch den `WebWorkerSQLiteDriver` ersetzen — dann persistiert auch der Browser.
-* **Eigene Stadt:** Koordinaten ins Repository, oder gleich eine Stadt-Auswahl in die UI.
+* **Bonus aus Übung 2.2:** Den `InMemoryWeatherCache` im Web durch den `WebWorkerSQLiteDriver` ersetzen - dann persistiert auch der Browser.
+* **Stadt-Auswahl:** Statt der festen Koordinaten eine Stadt-Suche in der UI - die [Geocoding-API von Open-Meteo](https://open-meteo.com/en/docs/geocoding-api) liefert Koordinaten zu jedem Ortsnamen.
 * **SwiftUI-Showcase:** Der Code aus Modul 6.3 wartet in `iosApp/` auf alle, die einen Mac zur Hand haben.
 
 ---
 
-**Danke fürs Mitbauen — und viel Erfolg mit Kotlin Multiplatform!** 🚀
+**Danke fürs Mitbauen - und viel Erfolg mit Kotlin Multiplatform!** 🚀

@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 
-// The repository only ever sees this interface — Room is an implementation detail
+// The repository only ever sees this interface - Room is an implementation detail
 interface WeatherCache {
     fun observe(): Flow<CurrentWeather?>
     suspend fun store(weather: CurrentWeather)
@@ -12,7 +12,7 @@ interface WeatherCache {
 
 expect fun createWeatherCache(): WeatherCache
 
-// One cache per process — every repository shares the same database connection
+// One cache per process - every repository shares the same database connection
 val weatherCache: WeatherCache by lazy { createWeatherCache() }
 
 class RoomWeatherCache(private val dao: WeatherDao) : WeatherCache {
@@ -25,7 +25,7 @@ class RoomWeatherCache(private val dao: WeatherDao) : WeatherCache {
     }
 
     private companion object {
-        const val LOCATION_KEY = "berlin"
+        const val LOCATION_KEY = "home"
     }
 }
 

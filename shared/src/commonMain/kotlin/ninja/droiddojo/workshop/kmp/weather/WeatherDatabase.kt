@@ -12,13 +12,13 @@ abstract class WeatherDatabase : RoomDatabase() {
     abstract fun weatherDao(): WeatherDao
 }
 
-// The Room compiler generates the actuals — one per target (no reflection on Native!)
+// The Room compiler generates the actuals - one per target (no reflection on Native!)
 @Suppress("KotlinNoActualForExpect")
 expect object WeatherDatabaseConstructor : RoomDatabaseConstructor<WeatherDatabase> {
     override fun initialize(): WeatherDatabase
 }
 
-// Shared assembly — the platform-specific part (path + driver) comes in via the builder
+// Shared assembly - the platform-specific part (path + driver) comes in via the builder
 fun createDatabase(builder: RoomDatabase.Builder<WeatherDatabase>): WeatherDatabase =
     builder
         .setQueryCoroutineContext(Dispatchers.Default)
