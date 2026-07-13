@@ -3,7 +3,7 @@
 **Dieser Branch enthält die Musterlösung von Übung 1.2** — und damit den kompletten Stand von Tag 1:
 
 * `expect`/`actual` über fünf Targets (`Platform.timeZoneId`) — Übung 1.1
-* Geteilte Netzwerk-Schicht mit Ktor + kotlinx.serialization gegen Open-Meteo — Übung 1.2
+* Geteilte Netzwerk-Schicht mit [Ktor](https://ktor.io) + [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) gegen [Open-Meteo](https://open-meteo.com) — Übung 1.2
 
 Sehenswert beim Vergleichen (`git diff lab-1-uebung-1.2 -- shared/`):
 
