@@ -6,8 +6,8 @@
 | --- | --- | --- |
 | UI | Compose Multiplatform | `commonMain` (`WeatherScreen`) |
 | State | Jetpack ViewModel + StateFlow | `commonMain` (`WeatherViewModel`) |
-| Daten | Room 3 als Single Source of Truth | `commonMain` + Treiber pro Target |
-| Netzwerk | Ktor + kotlinx.serialization | `commonMain` + Engine pro Target |
+| Daten | [Room 3](https://developer.android.com/kotlin/multiplatform/room) als Single Source of Truth | `commonMain` + Treiber pro Target |
+| Netzwerk | [Ktor](https://ktor.io) + [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | `commonMain` + Engine pro Target |
 | Plattform-Zugriffe | `expect`/`actual` | `timeZoneId`, `formatUpdatedAt`, `createWeatherCache` |
 
 Die Plattform-Einstiegspunkte (`androidApp`, `iosApp`, `desktopApp`, `webApp`) sind zusammen keine 100 Zeilen — der Rest ist geteilt.
