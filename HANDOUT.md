@@ -917,7 +917,7 @@ Für alle, deren Kotlin etwas eingestaubt ist - die Idiome, die in unseren Übun
 
 ```kotlin
 // val = read-only, var = mutable - default to val
-val city = "Berlin"
+val city = "Ihre Stadt"
 
 // Data class: equals/hashCode/copy for free - our models & DTOs
 data class CurrentWeather(val temperature: Double, val windSpeed: Double)
