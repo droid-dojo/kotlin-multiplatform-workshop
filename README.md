@@ -2,7 +2,7 @@
 
 **Dieser Branch enthält die Musterlösung von Übung 2.1.**
 
-Unsere App hat jetzt Architektur — aber kein Gedächtnis: Flugmodus an, App starten → Fehler-Screen. In dieser Übung bekommt sie eine **Room-Datenbank als Single Source of Truth**: Die UI liest nur noch aus der DB, das Netzwerk aktualisiert sie. Einmal geschrieben, läuft das auf Android, iOS und Desktop — und dank einer sauberen Abstraktion bleibt auch das Web funktionsfähig.
+Unsere App hat jetzt Architektur — aber kein Gedächtnis: Flugmodus an, App starten → Fehler-Screen. In dieser Übung bekommt sie eine **[Room](https://developer.android.com/kotlin/multiplatform/room)-Datenbank als Single Source of Truth**: Die UI liest nur noch aus der DB, das Netzwerk aktualisiert sie. Einmal geschrieben, läuft das auf Android, iOS und Desktop — und dank einer sauberen Abstraktion bleibt auch das Web funktionsfähig.
 
 > 📘 Die Theorie zu dieser Übung finden Sie im [HANDOUT.md](HANDOUT.md), **Modul 7** (Room). Die Gradle-Einträge stehen in **Anhang A, Schritt 3**.
 
@@ -23,7 +23,7 @@ Kein Netz → Exception → Error-Screen. Eine Enterprise-App zeigt stattdessen 
 
 * Eine Room-Datenbank (`Entity`, `DAO`, `Database`) in `commonMain` — mit Kotlin-2.x-Gefühl: `suspend` und `Flow`, keine blockierenden Aufrufe.
 * Ein `WeatherCache`-Interface mit **Room-Implementierung** (Android, iOS, Desktop) und **In-Memory-Implementierung** (Web) — die Faustregel aus Modul 3.2 in Aktion.
-* Das Repository wird zur SSOT-Schicht: UI beobachtet die DB, das Netz füllt sie.
+* Das Repository wird zur Single-Source-of-Truth-Schicht: UI beobachtet die DB, das Netz füllt sie.
 
 ## 🛠 Die Aufgaben im Detail
 
