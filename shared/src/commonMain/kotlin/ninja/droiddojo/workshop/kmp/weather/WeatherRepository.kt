@@ -7,7 +7,7 @@ class WeatherRepository(
     private val cache: WeatherCache = weatherCache,
 ) {
 
-    // The UI observes the database — offline capability by design (SSOT)
+    // The UI observes the database — offline capability by design (single source of truth)
     fun observeWeather(): Flow<CurrentWeather?> = cache.observe()
 
     // The network only refreshes the single source of truth

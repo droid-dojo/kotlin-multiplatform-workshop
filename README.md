@@ -76,7 +76,7 @@ Und einmal Desktop + Web starten: „Stand: … Uhr" muss auf beiden erscheinen.
 ## 💡 Tipps
 
 * `java.time` statt `SimpleDateFormat` auf JVM/Android — die alte Klasse ist nicht threadsafe; das war schon vor KMP ein Smell.
-* In produktivem Code wäre **kotlinx-datetime** die erste Wahl: eine Multiplatform-Library statt fünf `actual`s. Hier bauen wir die `actual`s bewusst von Hand — Sie sollen einmal alle fünf nativen APIs angefasst haben.
+* In produktivem Code wäre **[kotlinx-datetime](https://github.com/Kotlin/kotlinx-datetime)** die erste Wahl: eine Multiplatform-Library statt fünf `actual`s. Hier bauen wir die `actual`s bewusst von Hand — Sie sollen einmal alle fünf nativen APIs angefasst haben.
 * Android und Desktop teilen sich identischen JVM-Code? Für Neugierige: Ein eigener Zwischen-Source-Set (Modul 2.2) würde das Duplikat eliminieren.
 
 ---
