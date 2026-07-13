@@ -28,7 +28,7 @@ https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=te
 }
 ```
 
-Retrofit und Gson helfen uns hier nicht — beide sind JVM-only (Handout, Modul 4.1). Unsere Werkzeuge: **Ktor** und **kotlinx.serialization**.
+Retrofit und Gson helfen uns hier nicht — beide sind JVM-only (Handout, Modul 4.1). Unsere Werkzeuge: **[Ktor](https://ktor.io)** und **[kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)**.
 
 ## 🎯 Das Ziel
 
