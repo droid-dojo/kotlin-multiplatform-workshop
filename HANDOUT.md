@@ -444,7 +444,7 @@ class WeatherViewModel(
     // Kotlin 2.4 explicit backing field: read-only StateFlow for the outside,
     // MutableStateFlow inside the ViewModel - no private _uiState twin needed
     val uiState: StateFlow<WeatherUiState>
-        field = MutableStateFlow(WeatherUiState.Loading)
+        field = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
 
     fun refresh() {
         viewModelScope.launch {
